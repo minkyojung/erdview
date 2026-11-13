@@ -27,7 +27,22 @@ erdview open   [SOURCE]            draw and open in the browser
 erdview export [SOURCE] -o erd.html  one self-contained file to share
 erdview schema [SOURCE]            the schema as JSON (for agents, diffs, other tools)
 erdview sql                        the query it runs
+erdview serve  [SOURCE] --source NAME=SPEC ... [--pg ADMIN_URL]
+                                   live local viewer: a dropdown to pick a source, changes painted within 2 s
 ```
+
+### Live mode and versions
+
+```
+erdview serve --source toy=postgresql://…/app --source spring=db/migration --pg postgresql://postgres@localhost/postgres
+```
+
+![live](docs/live.png)
+
+- The page polls the server every 2 s. New tables and columns turn green, changed columns yellow, removed ones red for a few seconds. Tables keep their places.
+- A folder of migrations (`V0001__x.sql` Flyway style or `0001_x.sql`) becomes one dropdown entry per version: `spring @ V0001`, `spring @ V0002` … Each version is built by applying the files in order to a throwaway database on `--pg` (needs CREATEDB), then dropped. Results are cached until a file changes.
+- `#focus=table` in the URL shows only that table and its neighbours.
+- The server listens on 127.0.0.1 only; URLs and paths never reach the page.
 
 ## What it reads
 

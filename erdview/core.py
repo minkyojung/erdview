@@ -89,3 +89,40 @@ def open(data: dict, path: str | Path | None = None) -> Path:
     p.write_text(export(data), encoding="utf-8")
     webbrowser.open(p.as_uri())
     return p
+
+
+# ── diff: one implementation for `erdview diff`, the live viewer's colouring, MCP and tests ──────────────────────
+
+def _key(t: dict) -> str: return f"{t['schema']}.{t['name']}"
+_COL_FIELDS = ("type", "notnull", "default", "identity", "generated", "expression")
+
+
+def diff_schema(a: dict | None, b: dict) -> dict:
+    """What changed from schema a to schema b. a=None means everything in b is new.
+    {"added"|"removed": {"tables": [k], "columns": [[k, col]], "fks": [[k, name]], "indexes": [[k, name]]},
+     "changed": {"columns": [{"table": k, "column": col, "from": {...}, "to": {...}}]}}  — k = "schema.table"."""
+    A = {_key(t): t for t in (a or {}).get("tables", [])}; B = {_key(t): t for t in b.get("tables", [])}
+    out = {"added": {"tables": [], "columns": [], "fks": [], "indexes": []},
+           "removed": {"tables": [], "columns": [], "fks": [], "indexes": []}, "changed": {"columns": []}}
+    out["added"]["tables"] = sorted(k for k in B if k not in A)
+    out["removed"]["tables"] = sorted(k for k in A if k not in B)
+    fks = lambda t: [[_key(t), c["name"]] for c in t.get("constraints", []) if c["type"] == "foreign key"]   # a new table's lines are new too
+    for k in out["added"]["tables"]: out["added"]["fks"] += fks(B[k])
+    for k in out["removed"]["tables"]: out["removed"]["fks"] += fks(A[k])
+    for k in sorted(set(A) & set(B)):
+        ca = {c["name"]: c for c in A[k].get("columns", [])}; cb = {c["name"]: c for c in B[k].get("columns", [])}
+        out["added"]["columns"] += [[k, n] for n in cb if n not in ca]
+        out["removed"]["columns"] += [[k, n] for n in ca if n not in cb]
+        for n in cb:
+            if n in ca:
+                fa = {f: ca[n].get(f) for f in _COL_FIELDS}; fb = {f: cb[n].get(f) for f in _COL_FIELDS}
+                if fa != fb: out["changed"]["columns"].append({"table": k, "column": n, "from": fa, "to": fb})
+        for kind, field, pick in (("fks", "constraints", lambda x: x["type"] == "foreign key"), ("indexes", "indexes", lambda x: True)):
+            na = {x["name"]: x for x in A[k].get(field, []) if pick(x)}; nb = {x["name"]: x for x in B[k].get(field, []) if pick(x)}
+            out["added"][kind] += [[k, n] for n in nb if n not in na or na[n].get("definition") != nb[n].get("definition")]
+            out["removed"][kind] += [[k, n] for n in na if n not in nb or na[n].get("definition") != nb[n].get("definition")]
+    return out
+
+
+def is_empty_diff(d: dict) -> bool:
+    return not any(v for part in d.values() for v in part.values())

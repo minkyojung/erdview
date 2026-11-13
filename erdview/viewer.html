@@ -42,6 +42,12 @@
  #legend{position:fixed;bottom:0;left:0;right:0;height:46px;display:flex;gap:26px;align-items:center;justify-content:center;background:rgba(22,22,22,.92);border-top:1px solid var(--line);font-size:12px;color:var(--dim);font-family:var(--mono);z-index:5}
  #legend span{display:flex;gap:7px;align-items:center} #legend .i svg{width:14px;height:14px}
  #zoom{position:fixed;bottom:56px;right:14px;font-family:var(--mono);font-size:11px;color:var(--dim);z-index:5}
+ #src{background:#262626;color:#ddd;border:1px solid #3a3a3a;border-radius:6px;padding:5px 8px;font-family:var(--mono);font-size:12px} #src[hidden]{display:none}
+ #upd{font-family:var(--mono);font-size:11.5px;color:var(--dim)} #upd.err{color:#f87171}
+ #showall{width:auto!important;padding:0 10px!important;font-size:12px}
+ .tbl.added{border-color:#22c55e;box-shadow:0 0 0 1px #22c55e,0 6px 24px rgba(0,0,0,.45)} .row.added{background:#14391f} path.edge.added{stroke:#22c55e;stroke-dasharray:none}
+ .row.changed{background:#3f3512} .tbl.removed,.row.removed{opacity:.45} .tbl.removed{border-color:#ef4444} .row.removed .nm{text-decoration:line-through;color:#f87171}
+ .tbl.hidden{display:none}
  #empty{position:fixed;top:52px;bottom:46px;left:0;right:0;display:flex;align-items:center;justify-content:center;background:rgba(22,22,22,.88);z-index:6;overflow:auto}
  #empty[hidden]{display:none}
  #empty .card{width:min(660px,92vw);background:#1b1b1b;border:1px solid #333;border-radius:10px;padding:22px 26px;box-shadow:0 10px 40px rgba(0,0,0,.5);line-height:1.55}
@@ -56,7 +62,7 @@
  #err{color:#f87171;font-family:var(--mono);font-size:11.5px;white-space:pre-wrap;margin:10px 0 0} #err:empty{display:none}
  #close{float:right;margin:0!important}
 </style></head><body>
-<div id="hdr"><div class="tab"><span>Diagram</span></div><div class="meta" id="meta"></div><button id="open" title="다른 JSON 열기"></button><button id="save" title="데이터 포함 저장 — 받는 사람은 열기만 하면 됨" hidden></button><button id="arrange" title="자동 배치" hidden></button><button id="fit" title="화면에 맞추기" hidden></button></div>
+<div id="hdr"><div class="tab"><span>Diagram</span></div><select id="src" title="소스 · 버전" hidden></select><span id="upd"></span><button id="showall" title="전부 보기" hidden>전부 보기</button><div class="meta" id="meta"></div><button id="open" title="다른 JSON 열기"></button><button id="save" title="데이터 포함 저장 — 받는 사람은 열기만 하면 됨" hidden></button><button id="arrange" title="자동 배치" hidden></button><button id="fit" title="화면에 맞추기" hidden></button></div>
 <div id="vp"><div id="world"><svg id="lines"></svg></div></div>
 <div id="empty"><div class="card">
  <button class="btn" id="close" hidden>닫기</button>
@@ -259,7 +265,7 @@ function normalize(raw) {
   const tables = raw.tables.map((t, i) => {
     const cols = (t.columns || []).map(c => ({ ...c, fks: [], pk: false, uniq: false, checks: [] }));
     const m = /^\s*\[([^\]\n]{1,24})\]\s*/.exec(t.comment || '');   // 주석이 [source]처럼 시작하면 표 종류 태그
-    return { i, raw: t, schema: String(t.schema), name: String(t.name), kind: t.kind || 'table', cols, col: new Map(cols.map(c => [c.name, c])),
+    return { i, raw: t, key: `${t.schema}.${t.name}`, schema: String(t.schema), name: String(t.name), kind: t.kind || 'table', cols, col: new Map(cols.map(c => [c.name, c])),
              tag: m ? m[1] : (t.kind || 'table'), note: m ? t.comment.slice(m[0].length) : (t.comment || ''), pk: [], foot: [] };
   });
   const byKey = new Map(tables.map(t => [key(t.schema, t.name), t]));
@@ -390,7 +396,7 @@ function layout() {
 function rowY(r) { const t = r.$t || M.tables.find(t => t.el === r); return t.y + (r === t.el ? 18 : r.offsetTop + r.offsetHeight / 2); }
 function drawLines() {
   svg.replaceChildren();
-  const segs = M.edges.map(e => {
+  const segs = M.edges.filter(e => !e.from.el.classList.contains('hidden') && !e.to.el.classList.contains('hidden')).map(e => {
     const s = e.from, t = e.to, sl = s.x, sr = s.x + s.el.offsetWidth, tl = t.x, tr = t.x + t.el.offsetWidth, g = { e, ay: rowY(e.fromRow), by: rowY(e.toRow) };
     if (tr + 24 <= sl) Object.assign(g, { ax: sl, bx: tr, side: 1, base: tr });          // 받는 표가 왼쪽
     else if (sr + 24 <= tl) Object.assign(g, { ax: sr, bx: tl, side: -1, base: tl });    // 받는 표가 오른쪽 (순환·직접 옮김)
@@ -401,7 +407,7 @@ function drawLines() {
   for (const g of segs) { const k = g.side + ':' + Math.round(g.base); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(g); }
   for (const list of groups.values()) list.sort((p, q) => p.by - q.by || p.ay - q.ay).forEach((g, i) => g.lx = g.base + g.side * (LANE0 + i * LANE));
   for (const g of segs) {
-    const p = document.createElementNS(NS, 'path'); p.classList.add('edge'); p.setAttribute('d', `M${g.ax},${g.ay} H${g.lx} V${g.by} H${g.bx}`); svg.append(p);
+    const p = document.createElementNS(NS, 'path'); p.classList.add('edge'); if (g.e.addedMark) p.classList.add('added'); p.setAttribute('d', `M${g.ax},${g.ay} H${g.lx} V${g.by} H${g.bx}`); svg.append(p);
     g.e.path = p; g.e.dots = [[g.ax, g.ay], [g.bx, g.by]].map(([x, y]) => { const c = document.createElementNS(NS, 'circle'); c.classList.add('dot'); c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 3); svg.append(c); return c; });
   }
 }
@@ -508,13 +514,84 @@ for (const id of ['open', 'save', 'arrange', 'fit']) $(id).append(icon({ open: '
 $('legend').append(...[['Primary key', 'key', 'pk'], ['Foreign key', 'link', 'fk'], ['Identity', 'hash'], ['Unique', 'uniq'], ['Nullable', 'ring'], ['Non-Nullable', 'dot'], ['Index', 'idx'], ['Check', 'check'], ['View', 'eye']]
   .map(([label, name, cls]) => { const s = h('span', null, icon(name), label); if (cls) s.firstChild.style.color = cls === 'pk' ? '#f5c542' : '#8ab4f8'; return s; }));
 apply();
-const embedded = $('erd-data').textContent.trim();
-if (embedded) load(embedded); else showEmpty('');
 
-// ── #selftest: 테스트가 읽을 사실만 적음 (판정은 tests/test_pg_erd.py) ─────────
-if (location.hash === '#selftest') {
+// ── live 모드 (erdview serve): 소스 드롭다운, 2초 폴링, 바뀐 것 색칠, #focus ────
+const HASH = Object.fromEntries(location.hash.slice(1).split('&').filter(Boolean).map(p => { const [k, v] = p.split('='); return [k, v === undefined ? true : decodeURIComponent(v)]; }));
+const LIVE = { on: false, src: null, ver: null, seq: 0, timer: null, marks: [] };
+function liveInit(sources) {
+  LIVE.on = true; const sel = $('src'); sel.hidden = false; $('open').hidden = true;
+  for (const s of sources) for (const v of (s.versions || [null])) sel.append(h('option', { value: JSON.stringify([s.name, v]) }, v ? `${s.name} @ ${v}` : s.name));
+  if (!sel.options.length) { showEmpty('소스가 없어요. erdview serve --source NAME=SPEC 로 띄워 주세요.'); return; }
+  const want = sources.find(s => s.name === HASH.source) ? JSON.stringify([HASH.source, HASH.version || null]) : sel.options[0].value;
+  if ([...sel.options].some(o => o.value === want)) sel.value = want;
+  sel.onchange = () => { [LIVE.src, LIVE.ver] = JSON.parse(sel.value); LIVE.seq = 0; poll(); };
+  [LIVE.src, LIVE.ver] = JSON.parse(sel.value);
+  if (!HASH.selftest) LIVE.timer = setInterval(() => poll(), 2000);
+  return HASH.selftest && HASH.since !== undefined ? poll('&at=' + +HASH.since) : poll();   // selftest: start from that snapshot, then poll for real
+}
+async function poll(extra = '') {
+  const q = `source=${encodeURIComponent(LIVE.src)}&version=${encodeURIComponent(LIVE.ver || '')}&seq=${LIVE.seq}` + extra;
+  let j; try { j = await (await fetch('/data?' + q)).json(); } catch (e) { setUpd('서버에 연결할 수 없어요 (erdview serve가 꺼졌나요?)', true); return; }
+  if (j.error && !j.schema && !M) { setUpd(j.error, true); return; }
+  if (j.unchanged) return; LIVE.seq = j.seq;
+  if (j.schema) applyLive(j);
+  setUpd(j.error ? j.error : `updated ${j.updated}`, !!j.error);
+}
+function setUpd(text, err) { $('upd').textContent = text; $('upd').className = err ? 'err' : ''; }
+function applyLive(j) {
+  const pos = new Map(); const prev = M; if (M) for (const t of M.tables) pos.set(t.key, [t.x, t.y]);
+  clearMarks(); clearSel(); M = normalize(j.schema); renderTables();
+  if (!pos.size) { layout(); fit(); }
+  else {   // 아는 표는 제자리, 새 표는 옛 영역 아래 한 줄
+    let nx = X0, ny = Math.max(...prev.tables.map(t => t.y + t.el.offsetHeight)) + 80;
+    for (const t of M.tables) { const p = pos.get(t.key); if (p) [t.x, t.y] = p; else { t.x = nx; t.y = ny; nx += t.el.offsetWidth + 40; } t.el.style.left = t.x + 'px'; t.el.style.top = t.y + 'px'; }
+    for (const k of (j.diff?.removed.tables || [])) { const g = prev.tables.find(t => t.key === k); if (g) { g.el.classList.add('removed'); world.append(g.el); LIVE.marks.push(g.el); } }
+    for (const [k, c] of (j.diff?.removed.columns || [])) { const g = prev.tables.find(t => t.key === k)?.col.get(c)?.row, t = M.tables.find(t => t.key === k); if (g && t) { g.classList.add('removed'); t.el.querySelector('.foot') ? t.el.insertBefore(g, t.el.querySelector('.foot')) : t.el.append(g); LIVE.marks.push(g); } }
+  }
+  if (j.diff && pos.size) paint(j.diff);
+  applyFocus(); drawLines();
+  if (LIVE.marks.length) setTimeout(clearMarks, 6000);
+  $('empty').hidden = true; ['save', 'arrange', 'fit'].forEach(id => $(id).hidden = false);
+}
+function paint(d) {
+  const T = new Map(M.tables.map(t => [t.key, t])), mark = (el, cls) => { if (el) { el.classList.add(cls); LIVE.marks.push(el); } };
+  for (const k of d.added.tables) mark(T.get(k)?.el, 'added');
+  for (const [k, c] of d.added.columns) mark(T.get(k)?.col.get(c)?.row, 'added');
+  for (const x of d.changed.columns) mark(T.get(x.table)?.col.get(x.column)?.row, 'changed');
+  const fks = new Set(d.added.fks.map(([k, n]) => k + '\u0000' + n));
+  for (const e of M.edges) if (fks.has(e.from.key + '\u0000' + e.fk.name)) e.addedMark = true;
+}
+function clearMarks() {
+  for (const el of LIVE.marks) { if (el.classList.contains('removed')) el.remove(); else el.classList.remove('added', 'changed'); }
+  LIVE.marks = []; if (M) for (const e of M.edges) delete e.addedMark;
+  if (M) drawLines();
+}
+function applyFocus() {
+  if (!M) return; const f = HASH.focus; $('showall').hidden = !f;
+  const keep = new Set();
+  if (f) { for (const t of M.tables) if (t.key === f || t.name === f) keep.add(t); for (const e of M.edges) { if (keep.has(e.from)) keep.add(e.to); if (keep.has(e.to)) keep.add(e.from); } }
+  for (const t of M.tables) t.el.classList.toggle('hidden', !!f && !keep.has(t));
+}
+$('showall').onclick = () => { delete HASH.focus; history.replaceState(null, '', location.pathname); applyFocus(); drawLines(); fit(); };
+
+const embedded = $('erd-data').textContent.trim();
+let booted = Promise.resolve();
+if (embedded) { const d = JSON.parse(embedded); if (d.format === 'erdview-serve/1') booted = liveInit(d.sources); else load(embedded); }
+else showEmpty('');
+
+// ── #selftest: 테스트가 읽을 사실만 적음 (판정은 tests/) ─────────────────────
+// live 모드: #since=N이면 그 seq 기준 diff를 한 번 더 받아 색칠까지 확인
+if (HASH.selftest && LIVE.on && HASH.since !== undefined) booted = booted.then(() => poll());
+if (HASH.selftest) booted.then(selftest);
+function selftest() {
   const rep = { errors: ERRORS };
-  if (!M) {   // 빈 화면에서 붙여넣기 흐름: 잘못된 입력, psql 기본 출력(머리말·줄 수 포함)
+  if (LIVE.on) {
+    rep.live = { source: LIVE.src, version: LIVE.ver, seq: LIVE.seq, options: [...$('src').options].map(o => o.textContent), upd: $('upd').textContent, err: $('upd').className === 'err' };
+    rep.tables = M ? M.tables.map(t => ({ key: t.key, x: t.x, y: t.y, hidden: t.el.classList.contains('hidden') })) : [];
+    rep.highlighted = { added_tables: document.querySelectorAll('.tbl.added').length, added_cols: document.querySelectorAll('.row.added').length, changed_cols: document.querySelectorAll('.row.changed').length,
+                        removed_tables: document.querySelectorAll('.tbl.removed').length, removed_cols: document.querySelectorAll('.row.removed').length, added_edges: document.querySelectorAll('path.edge.added').length };
+    rep.edges_drawn = document.querySelectorAll('path.edge').length;
+  } else if (!M) {   // 빈 화면에서 붙여넣기 흐름: 잘못된 입력, psql 기본 출력(머리말·줄 수 포함)
     $('paste').value = 'not json'; $('draw').click(); rep.bad_input = $('err').textContent;
     $('paste').value = ' erd_json\n----------\n {"format":"pg-erd/1","tables":[{"schema":"public","name":"a","kind":"table","columns":[{"name":"id","type":"integer","notnull":true}],"constraints":[],"indexes":[]}]}\n(1 row)\n';
     $('draw').click(); rep.pasted = { tables: document.querySelectorAll('.tbl').length, panel_hidden: $('empty').hidden };
