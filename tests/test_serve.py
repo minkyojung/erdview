@@ -186,3 +186,50 @@ def test_page_live_shows_source_error(server, tmp_path, migrations):
     assert rep["errors"] == [] and rep["live"]["err"] and "V0002__b.sql" in rep["live"]["upd"]
     _, rep = chrome_report(base + "#selftest&source=spring&version=V0001", tmp_path / "f")
     assert not rep["live"]["err"] and [t["key"] for t in rep["tables"]] == ["app.a"]
+
+
+# ── step 5: diff as text (CLI), /diff endpoint, compare mode in the page ─────────────────────────────────────────
+
+def test_format_diff_lines():
+    a = D(T("a", ("id", "x")), T("b")); b = D(T("a", ("id", "y")), T("c")); b["tables"][0]["columns"][0]["notnull"] = False
+    txt = core.format_diff(core.diff_schema(a, b), "before", "after")
+    assert txt.splitlines() == ["before → after", "+ table   public.c", "- table   public.b", "+ column  public.a.y", "- column  public.a.x",
+                                "~ column  public.a.id  notnull: True → False"]
+    assert core.format_diff(core.diff_schema(a, a)) == "no changes (a → b)"
+
+
+def test_cli_diff(tmp_path, migrations, fresh):
+    import subprocess, sys, os
+    env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1]))
+    run = lambda *a: subprocess.run([sys.executable, "-m", "erdview.cli", "diff", *a], capture_output=True, text=True, env=env)
+    fa, fb = tmp_path / "a.json", tmp_path / "b.json"
+    fa.write_text(json.dumps(D(T("a")))); fb.write_text(json.dumps(D(T("a"), T("b"))))
+    r = run(str(fa), str(fb)); assert r.returncode == 1 and r.stdout.splitlines()[1] == "+ table   public.b"
+    r = run(str(fa), str(fa)); assert r.returncode == 0 and r.stdout.startswith("no changes")
+    r = run(str(fa), str(fb), "--json"); assert json.loads(r.stdout)["added"]["tables"] == ["public.b"]
+    r = run(f"{migrations}@V0001", f"{migrations}@V0002", "--pg", ADMIN)
+    assert r.returncode == 1 and "+ table   app.b" in r.stdout and "+ fk      app.b.b_a_id_fkey" in r.stdout
+    r = run(f"{migrations}@V0001", f"{migrations}@V0009", "--pg", ADMIN); assert r.returncode != 0 and "unknown version" in r.stderr
+    r = run(f"{migrations}@V0001", str(fa)); assert r.returncode != 0 and "--pg" in r.stderr
+
+
+def test_api_diff_endpoint(server, migrations, fresh):
+    base = server([S.MigrationSource("spring", migrations, ADMIN)])
+    j = get(base + "diff?a=spring&av=V0001&b=spring&bv=V0002")
+    assert j["diff"]["added"]["tables"] == ["app.b"] and j["text"].startswith("spring@V0001 → spring@V0002") and [t["name"] for t in j["schema_a"]["tables"]] == ["a"]
+    assert get(base + "diff?a=spring&av=V0001&b=nope", 400)["error"] == "unknown source"
+    assert get(base + "diff?a=spring&av=V0001&b=spring&bv=V0009", 400)["error"] == "unknown version"
+
+
+def test_page_compare_mode_keeps_colours_and_shows_text(server, tmp_path, migrations, fresh):
+    (migrations / "V0003__c.sql").write_text("alter table a add name text; drop table b; create table c (id int primary key, a_id int references a);")
+    base = server([S.MigrationSource("spring", migrations, ADMIN)])
+    _, rep = chrome_report(base + "#selftest&source=spring&version=V0003&compare=spring@V0002", tmp_path / "g")
+    assert rep["errors"] == [] and rep["compare"]["with"] == ["spring", "V0002"] and rep["compare"]["panel"]
+    assert rep["compare"]["options"][:2] == ["비교 안 함", "vs spring @ V0001"]
+    assert sorted(t["key"] for t in rep["tables"]) == ["app.a", "app.b", "app.c"]   # b is drawn too, as removed
+    assert rep["highlighted"] == {"added_tables": 1, "added_cols": 1, "changed_cols": 0, "removed_tables": 1, "removed_cols": 0, "added_edges": 1}
+    assert rep["removed_edges"] == 1 and "+ table   app.c" in rep["compare"]["text"] and "- table   app.b" in rep["compare"]["text"]
+    assert rep["live"]["upd"].startswith("vs spring@V0002: +1 −1 tables · +1 −0 ~0 columns")
+    _, rep2 = chrome_report(base + "#selftest&source=spring&version=V0003", tmp_path / "h")   # no compare: no colours, no panel
+    assert rep2["compare"] is None and rep2["highlighted"]["added_tables"] == 0 and [t["key"] for t in rep2["tables"]] == ["app.a", "app.c"]

@@ -47,7 +47,10 @@
  #showall{width:auto!important;padding:0 10px!important;font-size:12px}
  .tbl.added{border-color:#22c55e;box-shadow:0 0 0 1px #22c55e,0 6px 24px rgba(0,0,0,.45)} .row.added{background:#14391f} path.edge.added{stroke:#22c55e;stroke-dasharray:none}
  .row.changed{background:#3f3512} .tbl.removed,.row.removed{opacity:.45} .tbl.removed{border-color:#ef4444} .row.removed .nm{text-decoration:line-through;color:#f87171}
- .tbl.hidden{display:none}
+ .tbl.hidden{display:none} path.edge.removed{stroke:#ef4444;opacity:.5}
+ #cmp{background:#262626;color:#ddd;border:1px solid #3a3a3a;border-radius:6px;padding:5px 8px;font-family:var(--mono);font-size:12px} #cmp[hidden]{display:none}
+ #difftxt{position:fixed;top:60px;right:14px;max-width:420px;max-height:45vh;overflow:auto;margin:0;background:rgba(14,14,14,.95);border:1px solid #3a3a3a;border-radius:8px;padding:10px 12px;font-family:var(--mono);font-size:11.5px;line-height:1.55;color:#d4d4d4;z-index:6;white-space:pre-wrap}
+ #difftxt[hidden]{display:none} #difftxt .add{color:#4ade80} #difftxt .del{color:#f87171} #difftxt .chg{color:#fcd34d}
  #empty{position:fixed;top:52px;bottom:46px;left:0;right:0;display:flex;align-items:center;justify-content:center;background:rgba(22,22,22,.88);z-index:6;overflow:auto}
  #empty[hidden]{display:none}
  #empty .card{width:min(660px,92vw);background:#1b1b1b;border:1px solid #333;border-radius:10px;padding:22px 26px;box-shadow:0 10px 40px rgba(0,0,0,.5);line-height:1.55}
@@ -62,7 +65,7 @@
  #err{color:#f87171;font-family:var(--mono);font-size:11.5px;white-space:pre-wrap;margin:10px 0 0} #err:empty{display:none}
  #close{float:right;margin:0!important}
 </style></head><body>
-<div id="hdr"><div class="tab"><span>Diagram</span></div><select id="src" title="소스 · 버전" hidden></select><span id="upd"></span><button id="showall" title="전부 보기" hidden>전부 보기</button><div class="meta" id="meta"></div><button id="open" title="다른 JSON 열기"></button><button id="save" title="데이터 포함 저장 — 받는 사람은 열기만 하면 됨" hidden></button><button id="arrange" title="자동 배치" hidden></button><button id="fit" title="화면에 맞추기" hidden></button></div>
+<div id="hdr"><div class="tab"><span>Diagram</span></div><select id="src" title="소스 · 버전" hidden></select><select id="cmp" title="비교 기준 (이것과 비교해서 색칠)" hidden></select><span id="upd"></span><button id="showall" title="전부 보기" hidden>전부 보기</button><div class="meta" id="meta"></div><button id="open" title="다른 JSON 열기"></button><button id="save" title="데이터 포함 저장 — 받는 사람은 열기만 하면 됨" hidden></button><button id="arrange" title="자동 배치" hidden></button><button id="fit" title="화면에 맞추기" hidden></button></div>
 <div id="vp"><div id="world"><svg id="lines"></svg></div></div>
 <div id="empty"><div class="card">
  <button class="btn" id="close" hidden>닫기</button>
@@ -79,6 +82,7 @@
  </ol>
 </div></div>
 <div id="tip" hidden></div>
+<pre id="difftxt" hidden></pre>
 <div id="legend"></div><div id="zoom">100%</div>
 <script type="text/plain" id="erd-sql">-- pg_erd.sql — PostgreSQL 스키마를 JSON 한 줄로 읽어요. pg_erd.html이 이 JSON을 ERD로 그려요.
 -- 읽기만 해요(아무것도 바꾸지 않음). PostgreSQL 12 이상.
@@ -407,7 +411,7 @@ function drawLines() {
   for (const g of segs) { const k = g.side + ':' + Math.round(g.base); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(g); }
   for (const list of groups.values()) list.sort((p, q) => p.by - q.by || p.ay - q.ay).forEach((g, i) => g.lx = g.base + g.side * (LANE0 + i * LANE));
   for (const g of segs) {
-    const p = document.createElementNS(NS, 'path'); p.classList.add('edge'); if (g.e.addedMark) p.classList.add('added'); p.setAttribute('d', `M${g.ax},${g.ay} H${g.lx} V${g.by} H${g.bx}`); svg.append(p);
+    const p = document.createElementNS(NS, 'path'); p.classList.add('edge'); if (g.e.addedMark) p.classList.add('added'); if (g.e.removedMark) p.classList.add('removed'); p.setAttribute('d', `M${g.ax},${g.ay} H${g.lx} V${g.by} H${g.bx}`); svg.append(p);
     g.e.path = p; g.e.dots = [[g.ax, g.ay], [g.bx, g.by]].map(([x, y]) => { const c = document.createElementNS(NS, 'circle'); c.classList.add('dot'); c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 3); svg.append(c); return c; });
   }
 }
@@ -526,10 +530,17 @@ function liveInit(sources) {
   if ([...sel.options].some(o => o.value === want)) sel.value = want;
   sel.onchange = () => { [LIVE.src, LIVE.ver] = JSON.parse(sel.value); LIVE.seq = 0; poll(); };
   [LIVE.src, LIVE.ver] = JSON.parse(sel.value);
+  const cmp = $('cmp'); cmp.hidden = false; cmp.append(h('option', { value: '' }, '비교 안 함'));
+  for (const o of sel.options) cmp.append(h('option', { value: o.value }, 'vs ' + o.textContent));
+  if (HASH.compare) { const [n, v] = String(HASH.compare).split('@'); const w = JSON.stringify([n, v || null]); if ([...cmp.options].some(o => o.value === w)) cmp.value = w; }
+  LIVE.cmp = cmp.value ? JSON.parse(cmp.value) : null;
+  cmp.onchange = () => { LIVE.cmp = cmp.value ? JSON.parse(cmp.value) : null; LIVE.seq = 0; poll(); };
   if (!HASH.selftest) LIVE.timer = setInterval(() => poll(), 2000);
   return HASH.selftest && HASH.since !== undefined ? poll('&at=' + +HASH.since) : poll();   // selftest: start from that snapshot, then poll for real
 }
 async function poll(extra = '') {
+  if (LIVE.cmp) return pollCompare();
+  $('difftxt').hidden = true;
   const q = `source=${encodeURIComponent(LIVE.src)}&version=${encodeURIComponent(LIVE.ver || '')}&seq=${LIVE.seq}` + extra;
   let j; try { j = await (await fetch('/data?' + q)).json(); } catch (e) { setUpd('서버에 연결할 수 없어요 (erdview serve가 꺼졌나요?)', true); return; }
   if (j.error && !j.schema && !M) { setUpd(j.error, true); return; }
@@ -540,7 +551,7 @@ async function poll(extra = '') {
 function setUpd(text, err) { $('upd').textContent = text; $('upd').className = err ? 'err' : ''; }
 function applyLive(j) {
   const pos = new Map(); const prev = M; if (M) for (const t of M.tables) pos.set(t.key, [t.x, t.y]);
-  clearMarks(); clearSel(); M = normalize(j.schema); renderTables();
+  clearMarks(true); clearSel(); M = normalize(j.schema); renderTables();
   if (!pos.size) { layout(); fit(); }
   else {   // 아는 표는 제자리, 새 표는 옛 영역 아래 한 줄
     let nx = X0, ny = Math.max(...prev.tables.map(t => t.y + t.el.offsetHeight)) + 80;
@@ -548,9 +559,9 @@ function applyLive(j) {
     for (const k of (j.diff?.removed.tables || [])) { const g = prev.tables.find(t => t.key === k); if (g) { g.el.classList.add('removed'); world.append(g.el); LIVE.marks.push(g.el); } }
     for (const [k, c] of (j.diff?.removed.columns || [])) { const g = prev.tables.find(t => t.key === k)?.col.get(c)?.row, t = M.tables.find(t => t.key === k); if (g && t) { g.classList.add('removed'); t.el.querySelector('.foot') ? t.el.insertBefore(g, t.el.querySelector('.foot')) : t.el.append(g); LIVE.marks.push(g); } }
   }
-  if (j.diff && pos.size) paint(j.diff);
+  if (j.diff && (pos.size || j.compare)) paint(j.diff);
   applyFocus(); drawLines();
-  if (LIVE.marks.length) setTimeout(clearMarks, 6000);
+  if (LIVE.marks.length && !j.compare) setTimeout(() => clearMarks(), 6000);
   $('empty').hidden = true; ['save', 'arrange', 'fit'].forEach(id => $(id).hidden = false);
 }
 function paint(d) {
@@ -558,10 +569,29 @@ function paint(d) {
   for (const k of d.added.tables) mark(T.get(k)?.el, 'added');
   for (const [k, c] of d.added.columns) mark(T.get(k)?.col.get(c)?.row, 'added');
   for (const x of d.changed.columns) mark(T.get(x.table)?.col.get(x.column)?.row, 'changed');
-  const fks = new Set(d.added.fks.map(([k, n]) => k + '\u0000' + n));
-  for (const e of M.edges) if (fks.has(e.from.key + '\u0000' + e.fk.name)) e.addedMark = true;
+  const fks = new Set(d.added.fks.map(([k, n]) => k + '\u0000' + n)), gone = new Set(d.removed.fks.map(([k, n]) => k + '\u0000' + n));
+  for (const e of M.edges) { const id = e.from.key + '\u0000' + e.fk.name; if (fks.has(id)) e.addedMark = true; if (gone.has(id)) e.removedMark = true; }
 }
-function clearMarks() {
+// 비교 모드: 기준(A)과 현재(B)를 서버가 비교해 줌. B를 그리되 A에만 있던 표·열·FK는 빨갛게 같이 그림 (색칠은 유지)
+async function pollCompare() {
+  const [cn, cv] = LIVE.cmp, q = `a=${encodeURIComponent(cn)}&av=${encodeURIComponent(cv || '')}&b=${encodeURIComponent(LIVE.src)}&bv=${encodeURIComponent(LIVE.ver || '')}`;
+  let j; try { j = await (await fetch('/diff?' + q)).json(); } catch (e) { setUpd('서버에 연결할 수 없어요', true); return; }
+  if (j.error) { setUpd(j.error, true); return; }
+  const A = new Map(j.schema_a.tables.map(t => [`${t.schema}.${t.name}`, t])), merged = { ...j.schema_b, tables: j.schema_b.tables.map(t => ({ ...t, columns: [...t.columns], constraints: [...t.constraints] })) };
+  const B = new Map(merged.tables.map(t => [`${t.schema}.${t.name}`, t]));
+  for (const k of j.diff.removed.tables) merged.tables.push(A.get(k));
+  for (const [k, c] of j.diff.removed.columns) B.get(k)?.columns.push(A.get(k).columns.find(x => x.name === c));
+  for (const [k, n] of j.diff.removed.fks) { const t = B.get(k); if (t && !t.constraints.some(x => x.name === n)) t.constraints.push(A.get(k).constraints.find(x => x.name === n)); }
+  applyLive({ schema: merged, diff: j.diff, compare: true });
+  for (const k of j.diff.removed.tables) { const t = M.tables.find(t => t.key === k); if (t) t.el.classList.add('removed'); }
+  for (const [k, c] of j.diff.removed.columns) M.tables.find(t => t.key === k)?.col.get(c)?.row.classList.add('removed');
+  drawLines();
+  const n = j.diff, s = `vs ${cn}${cv ? '@' + cv : ''}: +${n.added.tables.length} −${n.removed.tables.length} tables · +${n.added.columns.length} −${n.removed.columns.length} ~${n.changed.columns.length} columns`;
+  setUpd(s, false); const pre = $('difftxt'); pre.replaceChildren(...j.text.split('\n').map(l => h('div', { class: l[0] === '+' ? 'add' : l[0] === '-' ? 'del' : l[0] === '~' ? 'chg' : '' }, l))); pre.hidden = false;
+  LIVE.diffText = j.text;
+}
+function clearMarks(force) {
+  if (LIVE.cmp && !force) return;
   for (const el of LIVE.marks) { if (el.classList.contains('removed')) el.remove(); else el.classList.remove('added', 'changed'); }
   LIVE.marks = []; if (M) for (const e of M.edges) delete e.addedMark;
   if (M) drawLines();
@@ -590,7 +620,8 @@ function selftest() {
     rep.tables = M ? M.tables.map(t => ({ key: t.key, x: t.x, y: t.y, hidden: t.el.classList.contains('hidden') })) : [];
     rep.highlighted = { added_tables: document.querySelectorAll('.tbl.added').length, added_cols: document.querySelectorAll('.row.added').length, changed_cols: document.querySelectorAll('.row.changed').length,
                         removed_tables: document.querySelectorAll('.tbl.removed').length, removed_cols: document.querySelectorAll('.row.removed').length, added_edges: document.querySelectorAll('path.edge.added').length };
-    rep.edges_drawn = document.querySelectorAll('path.edge').length;
+    rep.edges_drawn = document.querySelectorAll('path.edge').length; rep.removed_edges = document.querySelectorAll('path.edge.removed').length;
+    rep.compare = LIVE.cmp ? { with: LIVE.cmp, text: LIVE.diffText || '', panel: !$('difftxt').hidden, options: [...$('cmp').options].map(o => o.textContent) } : null;
   } else if (!M) {   // 빈 화면에서 붙여넣기 흐름: 잘못된 입력, psql 기본 출력(머리말·줄 수 포함)
     $('paste').value = 'not json'; $('draw').click(); rep.bad_input = $('err').textContent;
     $('paste').value = ' erd_json\n----------\n {"format":"pg-erd/1","tables":[{"schema":"public","name":"a","kind":"table","columns":[{"name":"id","type":"integer","notnull":true}],"constraints":[],"indexes":[]}]}\n(1 row)\n';

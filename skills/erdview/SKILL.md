@@ -16,7 +16,7 @@ uvx --from git+https://github.com/minkyojung/erdview erdview open <SOURCE>
 - a tbls JSON for other databases: `tbls out -t json | uvx --from git+https://github.com/minkyojung/erdview erdview open -`
 - nothing, when `DATABASE_URL` is set in the environment.
 
-Other commands: `export <SOURCE> -o erd.html` (one file to share), `schema <SOURCE>` (JSON you can read to answer questions about tables, columns and foreign keys), `sql` (the query), `serve --source NAME=SPEC ... [--pg ADMIN_URL]` (live viewer: changes you make to the database show up within 2 s; a migration folder gives one entry per version — use this while writing migrations).
+Other commands: `export <SOURCE> -o erd.html` (one file to share), `schema <SOURCE>` (JSON you can read to answer questions about tables, columns and foreign keys), `sql` (the query), `serve --source NAME=SPEC ... [--pg ADMIN_URL]` (live viewer: changes you make to the database show up within 2 s; a migration folder gives one entry per version — use this while writing migrations), `diff A B` (what changed, as lines; A/B may be `folder@V0002`; put its output in the PR description after writing a migration).
 
 ## Rules
 - Never run the query through a writable path you built yourself; use the `erdview` command, which opens a read-only connection.

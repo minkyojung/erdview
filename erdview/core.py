@@ -126,3 +126,20 @@ def diff_schema(a: dict | None, b: dict) -> dict:
 
 def is_empty_diff(d: dict) -> bool:
     return not any(v for part in d.values() for v in part.values())
+
+
+def format_diff(d: dict, a_label: str = "a", b_label: str = "b") -> str:
+    """The diff as lines people and PRs read: + added, - removed, ~ changed. Empty diff → 'no changes'."""
+    if is_empty_diff(d): return f"no changes ({a_label} → {b_label})"
+    L = [f"{a_label} → {b_label}"]
+    for k in d["added"]["tables"]: L.append(f"+ table   {k}")
+    for k in d["removed"]["tables"]: L.append(f"- table   {k}")
+    for k, c in d["added"]["columns"]: L.append(f"+ column  {k}.{c}")
+    for k, c in d["removed"]["columns"]: L.append(f"- column  {k}.{c}")
+    for x in d["changed"]["columns"]:
+        what = ", ".join(f"{f}: {x['from'].get(f)} → {x['to'].get(f)}" for f in _COL_FIELDS if x["from"].get(f) != x["to"].get(f))
+        L.append(f"~ column  {x['table']}.{x['column']}  {what}")
+    for kind, sign in (("added", "+"), ("removed", "-")):
+        for k, n in d[kind]["fks"]: L.append(f"{sign} fk      {k}.{n}")
+        for k, n in d[kind]["indexes"]: L.append(f"{sign} index   {k}.{n}")
+    return "\n".join(L)

@@ -157,6 +157,15 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path); q = parse_qs(u.query)
         if u.path == "/": return self._send(200, self.server.page.encode(), "text/html; charset=utf-8")
         if u.path == "/sources": return self._json({"sources": [s.describe() for s in self.server.sources.values()]})
+        if u.path == "/diff":   # compare two (source, version) pairs; B is drawn, A is what it is compared against
+            pick = lambda s, v: (self.server.sources.get(q.get(s, [""])[0]), q.get(v, [None])[0] or None)
+            (sa, va), (sb, vb) = pick("a", "av"), pick("b", "bv")
+            if not sa or not sb: return self._json({"error": "unknown source"}, 400)
+            if (va and va not in (sa.versions() or [])) or (vb and vb not in (sb.versions() or [])): return self._json({"error": "unknown version"}, 400)
+            A, B = self.server.refresh(sa, va), self.server.refresh(sb, vb)
+            if A.schema is None or B.schema is None: return self._json({"error": A.error or B.error or "no schema"}, 500)
+            return self._json({"a": {"source": sa.name, "version": va}, "b": {"source": sb.name, "version": vb}, "schema_a": A.schema, "schema_b": B.schema,
+                               "diff": core.diff_schema(A.schema, B.schema), "text": core.format_diff(core.diff_schema(A.schema, B.schema), f"{sa.name}{'@' + va if va else ''}", f"{sb.name}{'@' + vb if vb else ''}")})
         if u.path != "/data": return self._json({"error": "not found"}, 404)
         src = self.server.sources.get(q.get("source", [""])[0])
         if not src: return self._json({"error": "unknown source"}, 400)
