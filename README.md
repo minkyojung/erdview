@@ -1,0 +1,47 @@
+# erdview
+
+Interactive ERD for any database, from one HTML file. Read-only; nothing leaves your machine.
+
+![erdview](docs/erdview.png)
+
+- One read-only query reads the catalog (tables, columns, keys, indexes, comments). Never row data.
+- The viewer is a single HTML file: pan, zoom, drag tables, click a column to light up its relations, hover for comments.
+- "Save with data" gives you one file to send to anyone. They double-click it.
+- PostgreSQL natively (12+). MySQL, SQLite, SQL Server, BigQuery, Snowflake and more through [tbls](https://github.com/k1LoW/tbls) JSON.
+
+## Use
+
+| You | Run |
+|---|---|
+| Have a terminal and [uv](https://docs.astral.sh/uv/) | `uvx --from git+https://github.com/minkyojung/erdview erdview open postgresql://user@host:5432/db` |
+| Prefer pip | `pip install git+https://github.com/minkyojung/erdview` then `erdview open <url>` |
+| Use a coding agent (Claude Code, Cursor, Codex…) | Copy `skills/erdview/` into your project's `.claude/skills/` (or paste `skills/erdview/AGENTS.md` into your `AGENTS.md`). Then: "show me the ERD" |
+| Have another database | `brew install tbls`, then `tbls out -t json \| erdview open -` (see tbls docs for the `dsn`) |
+| Just want to look | Open the `erd_*.html` someone sent you. No install |
+| Have no Python at all | Download `viewer.html`, open it, press **Copy SQL**, run it in your SQL client, paste the result |
+
+`SOURCE` can be a PostgreSQL URL, a JSON file (erdview or tbls format), or `-` for stdin. Omit it to use `$DATABASE_URL`.
+
+```
+erdview open   [SOURCE]            draw and open in the browser
+erdview export [SOURCE] -o erd.html  one self-contained file to share
+erdview schema [SOURCE]            the schema as JSON (for agents, diffs, other tools)
+erdview sql                        the query it runs
+```
+
+## What it reads
+
+Tables, partitioned tables (not their partitions), views, materialized views, foreign tables; columns with type, nullability, default, identity/serial/generated, comment; primary/unique/foreign keys with column order and on-delete/update, checks, exclusions; the other indexes; which tables a view reads. Extension-owned objects and system schemas are skipped. To limit schemas, edit `only_schemas` at the top of the SQL.
+
+From tbls JSON the same, minus identity/generated flags (tbls does not record them).
+
+## Develop
+
+```
+python -m venv .venv && .venv/bin/pip install -e '.[dev]'
+.venv/bin/pytest -q          # needs Postgres (ERDVIEW_TEST_PG=postgresql://postgres:x@localhost:5433/postgres) and Chrome; skips otherwise
+```
+
+`erdview/pg_erd.sql` is the source of truth for the query. After changing it, paste it into the `#erd-sql` block of `erdview/viewer.html`; a test checks they match.
+
+MIT.

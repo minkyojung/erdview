@@ -1,0 +1,14 @@
+{"format":"pg-erd/1","database":"<b>db</b>","server_version":"17","tables":[
+ {"schema":"public","name":"<img src=x onerror=\"document.body.dataset.pwned=1\">","kind":"table",
+  "comment":"[<i>tag</i>] </script><script>document.body.dataset.pwned=2</script>",
+  "columns":[{"name":"id","type":"integer","notnull":true},
+             {"name":"<svg onload=\"document.body.dataset.pwned=3\">","type":"text","notnull":false,"comment":"<img src=x onerror=\"document.body.dataset.pwned=4\">"}],
+  "constraints":[{"name":"p","type":"primary key","columns":["id"],"definition":"PRIMARY KEY (id)"},
+                 {"name":"c","type":"check","columns":["id","<svg onload=\"document.body.dataset.pwned=3\">"],"definition":"CHECK (<img src=x onerror=\"document.body.dataset.pwned=5\">)"}],
+  "indexes":[{"name":"<b>i</b>","unique":false,"partial":false,"columns":["id"],"definition":"CREATE INDEX x ON t USING btree (<script>document.body.dataset.pwned=6</script>)"}]},
+ {"schema":"public","name":"child","kind":"table",
+  "columns":[{"name":"id","type":"integer","notnull":true},{"name":"parent_id","type":"integer","notnull":true}],
+  "constraints":[{"name":"f","type":"foreign key","columns":["parent_id"],"references":{"schema":"public","table":"<img src=x onerror=\"document.body.dataset.pwned=1\">","columns":["id"]},"on_delete":"no action","on_update":"no action","definition":"FOREIGN KEY (parent_id) REFERENCES x(id)"},
+                 {"name":"g","type":"foreign key","columns":["id"],"references":{"schema":"other","table":"</script>","columns":["id"]},"on_delete":"no action","on_update":"no action","definition":"FOREIGN KEY (id) REFERENCES other.x(id)"}],
+  "indexes":[]}
+]}

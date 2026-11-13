@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>pg_erd — PostgreSQL ERD</title>
+<style>
+ :root{--bg:#161616;--card:#1e1e1e;--line:#2c2c2c;--fg:#e4e4e4;--dim:#8b8b8b;--mono:ui-monospace,Menlo,"SF Mono",monospace}
+ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font-family:-apple-system,"Apple SD Gothic Neo",Inter,sans-serif;font-size:13px}
+ #vp{position:absolute;inset:0;cursor:grab;background:radial-gradient(#2a2a2a 1px,transparent 1px);background-size:22px 22px}
+ #vp.drag{cursor:grabbing}
+ #world{position:absolute;left:0;top:0;transform-origin:0 0;width:2000px;height:2000px}
+ svg#lines{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+ #hdr{position:fixed;top:0;left:0;right:0;height:52px;padding:0 14px;background:rgba(22,22,22,.92);border-bottom:1px solid var(--line);z-index:5;display:flex;gap:10px;align-items:center}
+ #hdr .tab{display:flex;gap:8px;align-items:center;background:#262626;border:1px solid #333;border-radius:8px;padding:7px 14px;font-size:13px;font-weight:600}
+ #hdr .tab svg{width:15px;height:15px;color:#ccc}
+ #hdr .meta{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--dim)}
+ #hdr button{background:#262626;color:#ccc;border:1px solid #3a3a3a;border-radius:6px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0} #hdr button:hover{background:#333} #hdr button svg{width:14px;height:14px}
+ #hdr button[hidden]{display:none}
+ .i{display:inline-flex} .i svg{width:13px;height:13px}
+ .tbl{position:absolute;width:340px;background:var(--card);border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.45);user-select:none}
+ .tbl h3{margin:0;padding:9px 12px;font-size:13.5px;font-weight:600;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;font-family:var(--mono);cursor:move}
+ .tbl h3 .tn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .tbl h3 .sc{color:var(--dim);font-weight:400}
+ .tbl h3 .kind{margin-left:auto;flex:none;font-family:var(--mono);font-size:10.5px;font-weight:400;color:var(--dim)}
+ .tbl h3 .i svg{width:14px;height:14px;color:var(--dim)}
+ .tbl .note{padding:6px 12px;border-bottom:1px solid var(--line);font-size:11.5px;line-height:1.45;color:#a3a3a3;white-space:pre-line}
+ .row{display:flex;align-items:center;gap:8px;padding:5px 12px;border-bottom:1px solid var(--line)}
+ .row:last-child{border-bottom:0}
+ .row .ic{width:58px;flex:none;display:flex;gap:3px;align-items:center;color:#6b6b6b}
+ .row .ic .pk{color:#f5c542} .row .ic .fk{color:#8ab4f8} .row .ic .nn{color:#9a9a9a} .row .ic .nul{color:#555}
+ .row .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:12.5px}
+ .row.pk .nm{color:#fff;font-weight:600}
+ .row .ty{max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+ .row:hover{background:#262626}
+ .foot{padding:6px 12px;font-family:var(--mono);font-size:10.5px;color:#8b8b8b;line-height:1.6;background:#1a1a1a;border-radius:0 0 8px 8px}
+ .foot div{display:flex;gap:6px;align-items:flex-start;overflow-wrap:anywhere} .foot .i svg{width:12px;height:12px;margin-top:3px;color:#6b6b6b}
+ path.edge{stroke:#6f6f6f;stroke-width:1.2;fill:none;stroke-dasharray:5 4;stroke-linejoin:round;transition:opacity .15s}
+ circle.dot{fill:#8f8f8f}
+ body.sel path.edge:not(.hl),body.sel circle.dot:not(.hl){opacity:.1}
+ path.edge.hl{stroke:#8ab4f8;stroke-width:2;stroke-dasharray:none} circle.dot.hl{fill:#8ab4f8}
+ body.sel .row:not(.hl):not(.selrow){opacity:.3} body.sel .tbl:not(.hastbl){opacity:.35}
+ .row.hl{background:#1c2f4a} .row.selrow{background:#2563eb} .row.selrow .ty,.row.selrow .nm{color:#fff}
+ .tbl.hastbl{border-color:#3b82f6}
+ #tip{position:fixed;z-index:20;max-width:340px;background:#0e0e0e;border:1px solid #3a3a3a;border-radius:6px;padding:8px 10px;font-size:11.5px;color:#d4d4d4;line-height:1.5;pointer-events:none;white-space:pre-line}
+ #tip[hidden]{display:none} #tip .c{font-family:var(--mono);color:#a3a3a3}
+ #legend{position:fixed;bottom:0;left:0;right:0;height:46px;display:flex;gap:26px;align-items:center;justify-content:center;background:rgba(22,22,22,.92);border-top:1px solid var(--line);font-size:12px;color:var(--dim);font-family:var(--mono);z-index:5}
+ #legend span{display:flex;gap:7px;align-items:center} #legend .i svg{width:14px;height:14px}
+ #zoom{position:fixed;bottom:56px;right:14px;font-family:var(--mono);font-size:11px;color:var(--dim);z-index:5}
+ #empty{position:fixed;top:52px;bottom:46px;left:0;right:0;display:flex;align-items:center;justify-content:center;background:rgba(22,22,22,.88);z-index:6;overflow:auto}
+ #empty[hidden]{display:none}
+ #empty .card{width:min(660px,92vw);background:#1b1b1b;border:1px solid #333;border-radius:10px;padding:22px 26px;box-shadow:0 10px 40px rgba(0,0,0,.5);line-height:1.55}
+ body.dragging #empty .card{outline:2px dashed #3b82f6;outline-offset:4px}
+ #empty h2{margin:0 0 4px;font-size:16px} #empty .sub{color:var(--dim);margin:0 0 16px}
+ #empty ol{margin:0;padding-left:20px} #empty li{margin:0 0 16px}
+ #empty code{display:block;margin:8px 0 0;font-family:var(--mono);font-size:11.5px;background:#111;border:1px solid #2c2c2c;border-radius:5px;padding:6px 9px;color:#ccc;user-select:all;overflow-x:auto;white-space:nowrap}
+ #empty textarea{display:block;width:100%;box-sizing:border-box;height:96px;margin:8px 0;background:#111;color:#ddd;border:1px solid #333;border-radius:6px;font-family:var(--mono);font-size:11.5px;padding:8px;resize:vertical}
+ #empty .btn{background:#262626;color:#ddd;border:1px solid #3a3a3a;border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer;margin:8px 6px 0 0} #empty .btn:hover{background:#333}
+ #empty .btn.primary{background:#2563eb;border-color:#2563eb;color:#fff;margin-top:0}
+ #empty .fine{color:var(--dim);font-size:11.5px;margin:0}
+ #err{color:#f87171;font-family:var(--mono);font-size:11.5px;white-space:pre-wrap;margin:10px 0 0} #err:empty{display:none}
+ #close{float:right;margin:0!important}
+</style></head><body>
+<div id="hdr"><div class="tab"><span>Diagram</span></div><div class="meta" id="meta"></div><button id="open" title="다른 JSON 열기"></button><button id="save" title="데이터 포함 저장 — 받는 사람은 열기만 하면 됨" hidden></button><button id="arrange" title="자동 배치" hidden></button><button id="fit" title="화면에 맞추기" hidden></button></div>
+<div id="vp"><div id="world"><svg id="lines"></svg></div></div>
+<div id="empty"><div class="card">
+ <button class="btn" id="close" hidden>닫기</button>
+ <h2>PostgreSQL ERD</h2>
+ <p class="sub">SQL 한 번 실행하고 결과를 붙여넣으면 ERD가 그려져요. 읽기만 하는 SQL이고, 데이터는 이 브라우저 밖으로 나가지 않아요.</p>
+ <ol>
+  <li>DB에서 SQL을 실행해요.<br><button class="btn" id="copy-sql">SQL 복사</button><button class="btn" id="get-sql">pg_erd.sql 받기</button>
+   <code>psql "postgresql://user@host:5432/dbname" -XAtf pg_erd.sql &gt; schema.json</code>
+   <p class="fine">DBeaver·DataGrip·pgAdmin에서는 결과 칸(erd_json)의 값을 통째로 복사하세요.</p></li>
+  <li>결과를 붙여넣거나, schema.json 파일을 이 창에 끌어다 놓아요.
+   <textarea id="paste" placeholder='{"format":"pg-erd/1", ...}' spellcheck="false"></textarea>
+   <button class="btn primary" id="draw">그리기</button><button class="btn" id="pick">파일 선택</button><input type="file" id="file" accept=".json,.txt,application/json,text/plain" hidden>
+   <div id="err"></div></li>
+ </ol>
+</div></div>
+<div id="tip" hidden></div>
+<div id="legend"></div><div id="zoom">100%</div>
+<script type="text/plain" id="erd-sql">-- pg_erd.sql — PostgreSQL 스키마를 JSON 한 줄로 읽어요. pg_erd.html이 이 JSON을 ERD로 그려요.
+-- 읽기만 해요(아무것도 바꾸지 않음). PostgreSQL 12 이상.
+--
+--   psql "postgresql://user@host:5432/dbname" -XAtf pg_erd.sql > schema.json
+--   GUI(DBeaver, DataGrip, pgAdmin 등): 이 파일 전체를 실행하고 결과 칸 erd_json의 값을 복사
+--
+-- 일부 스키마만 보려면 아래 only_schemas를 '{public,sales}'처럼 바꿔요. 비워 두면 시스템 스키마를 뺀 전부.
+-- 빠지는 것: 시스템 스키마, 파티션 자식(부모만 보임), 확장(extension)이 만든 표·뷰.
+with opt as (
+  select '{}'::text[] as only_schemas
+),
+rel as (
+  select c.oid, n.nspname as schema, c.relname as name, c.relkind
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  cross join opt
+  where c.relkind in ('r', 'p', 'v', 'm', 'f')
+    and not c.relispartition
+    and n.nspname !~ '^pg_' and n.nspname <> 'information_schema'
+    and (cardinality(opt.only_schemas) = 0 or n.nspname = any (opt.only_schemas))
+    and not exists (select 1 from pg_depend d
+                    where d.classid = 'pg_class'::regclass and d.objid = c.oid and d.deptype = 'e')
+),
+col as (
+  select a.attrelid,
+         jsonb_agg(jsonb_build_object(
+           'name', a.attname,
+           'type', format_type(a.atttypid, a.atttypmod),
+           'notnull', a.attnotnull,
+           'default', case when a.attgenerated = '' then pg_get_expr(ad.adbin, ad.adrelid) end,
+           'generated', case a.attgenerated when 's' then 'stored' when 'v' then 'virtual' end,
+           'expression', case when a.attgenerated <> '' then pg_get_expr(ad.adbin, ad.adrelid) end,
+           'identity', case a.attidentity when 'a' then 'always' when 'd' then 'by default' end,
+           'serial', case when exists (select 1 from pg_depend d join pg_class s on s.oid = d.objid and s.relkind = 'S'
+                                       where d.classid = 'pg_class'::regclass and d.refobjid = a.attrelid
+                                         and d.refobjsubid = a.attnum and d.deptype = 'a') then true end,
+           'comment', col_description(a.attrelid, a.attnum)
+         ) order by a.attnum) as columns
+  from pg_attribute a
+  join rel on rel.oid = a.attrelid
+  left join pg_attrdef ad on ad.adrelid = a.attrelid and ad.adnum = a.attnum
+  where a.attnum > 0 and not a.attisdropped
+  group by a.attrelid
+),
+con as (
+  select k.conrelid,
+         jsonb_agg(jsonb_build_object(
+           'name', k.conname,
+           'type', case k.contype when 'p' then 'primary key' when 'u' then 'unique' when 'f' then 'foreign key'
+                                  when 'c' then 'check' else 'exclude' end,
+           'columns', (select jsonb_agg(a.attname order by u.ord)
+                       from unnest(k.conkey) with ordinality as u(attnum, ord)
+                       join pg_attribute a on a.attrelid = k.conrelid and a.attnum = u.attnum),
+           'references', case when k.contype = 'f' then jsonb_build_object(
+                           'schema', fn.nspname,
+                           'table', fc.relname,
+                           'columns', (select jsonb_agg(a.attname order by u.ord)
+                                       from unnest(k.confkey) with ordinality as u(attnum, ord)
+                                       join pg_attribute a on a.attrelid = k.confrelid and a.attnum = u.attnum)) end,
+           'on_delete', case when k.contype = 'f' then case k.confdeltype when 'a' then 'no action' when 'r' then 'restrict'
+                          when 'c' then 'cascade' when 'n' then 'set null' else 'set default' end end,
+           'on_update', case when k.contype = 'f' then case k.confupdtype when 'a' then 'no action' when 'r' then 'restrict'
+                          when 'c' then 'cascade' when 'n' then 'set null' else 'set default' end end,
+           'definition', pg_get_constraintdef(k.oid)
+         ) order by k.contype, k.conname) as constraints
+  from pg_constraint k
+  join rel on rel.oid = k.conrelid
+  left join pg_class fc on fc.oid = k.confrelid
+  left join pg_namespace fn on fn.oid = fc.relnamespace
+  where k.contype in ('p', 'u', 'f', 'c', 'x')
+    and k.conparentid = 0
+  group by k.conrelid
+),
+idx as (
+  select i.indrelid,
+         jsonb_agg(jsonb_build_object(
+           'name', ic.relname,
+           'unique', i.indisunique,
+           'partial', i.indpred is not null,
+           'columns', (select jsonb_agg(a.attname order by u.ord)
+                       from unnest(i.indkey::int2[]) with ordinality as u(attnum, ord)
+                       left join pg_attribute a on a.attrelid = i.indrelid and a.attnum = u.attnum
+                       where u.ord <= i.indnkeyatts),
+           'definition', pg_get_indexdef(i.indexrelid)
+         ) order by ic.relname) as indexes
+  from pg_index i
+  join rel on rel.oid = i.indrelid
+  join pg_class ic on ic.oid = i.indexrelid
+  where not exists (select 1 from pg_constraint k
+                    where k.conrelid = i.indrelid and k.conindid = i.indexrelid and k.contype in ('p', 'u', 'x'))
+  group by i.indrelid
+),
+uses as (
+  select r.ev_class,
+         jsonb_agg(distinct jsonb_build_object('schema', n.nspname, 'table', c.relname)) as uses
+  from pg_rewrite r
+  join rel on rel.oid = r.ev_class and rel.relkind in ('v', 'm')
+  join pg_depend d on d.classid = 'pg_rewrite'::regclass and d.objid = r.oid
+                  and d.refclassid = 'pg_class'::regclass and d.deptype = 'n'
+  join pg_class c on c.oid = d.refobjid and c.oid <> r.ev_class
+  join pg_namespace n on n.oid = c.relnamespace
+  group by r.ev_class
+)
+select jsonb_build_object(
+  'format', 'pg-erd/1',
+  'database', current_database(),
+  'server_version', current_setting('server_version'),
+  'generated_at', to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+  'tables', coalesce(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+    'schema', rel.schema,
+    'name', rel.name,
+    'kind', case rel.relkind when 'r' then 'table' when 'p' then 'partitioned table' when 'v' then 'view'
+                             when 'm' then 'materialized view' else 'foreign table' end,
+    'comment', obj_description(rel.oid, 'pg_class'),
+    'partition_key', case when rel.relkind = 'p' then pg_get_partkeydef(rel.oid) end,
+    'partitions', case when rel.relkind = 'p' then (select count(*) from pg_inherits h where h.inhparent = rel.oid) end,
+    'columns', coalesce(col.columns, '[]'::jsonb),
+    'constraints', coalesce(con.constraints, '[]'::jsonb),
+    'indexes', coalesce(idx.indexes, '[]'::jsonb),
+    'uses', uses.uses
+  )) order by rel.schema, rel.name), '[]'::jsonb)
+)::text as erd_json
+from rel
+left join col on col.attrelid = rel.oid
+left join con on con.conrelid = rel.oid
+left join idx on idx.indrelid = rel.oid
+left join uses on uses.ev_class = rel.oid;
+</script>
+<script type="application/json" id="erd-data"></script>
+<script>
+const PRISTINE = document.documentElement.cloneNode(true);   // "데이터 포함 저장"의 바탕. 화면을 바꾸기 전에 떠 둠
+const ERRORS = []; addEventListener('error', e => ERRORS.push(String(e.message))); addEventListener('unhandledrejection', e => ERRORS.push(String(e.reason)));
+const I={
+ key:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>',
+ link:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>',
+ dot:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l7 9-7 9-7-9z"/></svg>',
+ ring:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 9-7 9-7-9z"/></svg>',
+ hash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"/></svg>',
+ uniq:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 11a5 5 0 0 1 10 0v2a7 7 0 0 1-2 5M9.5 9.5A2.5 2.5 0 0 1 14.5 11v3a9 9 0 0 1-1 4M12 14v1a6 6 0 0 1-3 5M5 14a9 9 0 0 0 1 4M19 8a8 8 0 0 0-14 0"/></svg>',
+ diagram:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M11 7h4v6"/></svg>',
+ layout:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
+ fit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>',
+ idx:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 6h16M4 12h10M4 18h6"/></svg>',
+ check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>',
+ eye:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>',
+ table:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></svg>',
+ open:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M3 6h6l2 2h10v11H3z"/></svg>',
+ save:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0-4-4m4 4 4-4M4 17v3h16v-3"/></svg>',
+};
+const $ = id => document.getElementById(id);
+const SQL_TEXT = $('erd-sql').textContent;
+const CARD_W = 340, X0 = 40, Y0 = 40, VGAP = 28, GAP_MIN = 120, LANE0 = 16, LANE = 12, TOP = 52, BOTTOM = 46;
+const world = $('world'), svg = $('lines'), vp = $('vp'), NS = 'http://www.w3.org/2000/svg';
+let M = null, scale = 1, tx = 0, ty = 0;
+
+// 데이터에서 온 글자는 전부 텍스트 노드로 넣음 (HTML로 해석되지 않게). innerHTML은 위의 고정 아이콘에만 씀
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
+  for (const k of kids) if (k != null && k !== false) el.append(k instanceof Node ? k : String(k));
+  return el;
+}
+function icon(name, cls) { const s = h('span', { class: 'i' + (cls ? ' ' + cls : '') }); s.innerHTML = I[name]; return s; }
+const SHORT = [[/^timestamp with time zone/, 'timestamptz'], [/^timestamp without time zone/, 'timestamp'], [/^time with time zone/, 'timetz'],
+  [/^time without time zone/, 'time'], [/^character varying/, 'varchar'], [/^character\b/, 'char'], [/^boolean/, 'bool'], [/^integer/, 'int'], [/^double precision/, 'float8']];
+const shortType = t => SHORT.reduce((s, [re, r]) => s.replace(re, r), t || '');
+const isView = t => t.kind === 'view' || t.kind === 'materialized view';
+
+// ── 입력: pg_erd.sql 결과 텍스트 → 원본 객체 ───────────────────────────────
+function parseInput(text) {
+  const a = text.indexOf('{'), b = text.lastIndexOf('}');   // psql 머리말·"(1 row)" 같은 군더더기는 버림
+  if (a < 0 || b < a) throw new Error('JSON이 안 보여요. pg_erd.sql 결과({ 로 시작하는 한 줄)를 붙여넣어 주세요.');
+  let d;
+  try { d = JSON.parse(text.slice(a, b + 1)); }
+  catch (e) { throw new Error(`JSON을 읽지 못했어요: ${e.message}\nGUI 클라이언트가 긴 값을 잘랐을 수 있어요. psql 명령으로 파일을 만들거나 결과 칸의 값을 통째로 복사해 보세요.`); }
+  if (!d || d.format !== 'pg-erd/1' || !Array.isArray(d.tables)) throw new Error('pg_erd.sql의 결과가 아니에요 ("format": "pg-erd/1"과 tables 목록이 없음).');
+  return d;
+}
+
+// ── 원본 → 그릴 모델: 열 표시(pk·fk·unique …), FK 선, 표 아래 줄 ──────────────
+function normalize(raw) {
+  const key = (s, n) => s + '\u0000' + n;
+  const tables = raw.tables.map((t, i) => {
+    const cols = (t.columns || []).map(c => ({ ...c, fks: [], pk: false, uniq: false, checks: [] }));
+    const m = /^\s*\[([^\]\n]{1,24})\]\s*/.exec(t.comment || '');   // 주석이 [source]처럼 시작하면 표 종류 태그
+    return { i, raw: t, schema: String(t.schema), name: String(t.name), kind: t.kind || 'table', cols, col: new Map(cols.map(c => [c.name, c])),
+             tag: m ? m[1] : (t.kind || 'table'), note: m ? t.comment.slice(m[0].length) : (t.comment || ''), pk: [], foot: [] };
+  });
+  const byKey = new Map(tables.map(t => [key(t.schema, t.name), t]));
+  const multi = new Set(tables.map(t => t.schema)).size > 1;
+  const qual = (s, n) => multi ? `${s}.${n}` : n;
+  const edges = [];
+  for (const t of tables) {
+    for (const k of t.raw.constraints || []) {
+      const cols = k.columns || [], one = cols.length === 1 ? t.col.get(cols[0]) : null;
+      if (k.type === 'primary key') { t.pk = cols; cols.forEach(n => t.col.has(n) && (t.col.get(n).pk = true)); }
+      else if (k.type === 'unique') { if (one) one.uniq = true; else t.foot.push(['uniq', `unique (${cols.join(', ')})`]); }
+      else if (k.type === 'check') { if (one) one.checks.push(k.definition); else t.foot.push(['check', k.definition]); }
+      else if (k.type === 'exclude') t.foot.push(['check', k.definition]);
+      else if (k.type === 'foreign key') {
+        const r = k.references || {}, to = byKey.get(key(r.schema, r.table));
+        cols.forEach(n => t.col.has(n) && t.col.get(n).fks.push(k));
+        if (to) edges.push({ from: t, to, fk: k });
+        else t.foot.push(['fk', `(${cols.join(', ')}) → ${r.schema}.${r.table} (그림에 없음)`]);
+      }
+    }
+    for (const x of t.raw.indexes || []) {
+      const cols = x.columns || [], u = x.definition.indexOf(' USING ');
+      if (x.unique && !x.partial && cols.length === 1 && t.col.has(cols[0])) t.col.get(cols[0]).uniq = true;
+      t.foot.push(['idx', `${x.unique ? 'unique ' : ''}index ${x.name} ${u < 0 ? x.definition : x.definition.slice(u + 7).replace(/^btree /, '')}`]);
+    }
+    if (t.raw.partition_key) t.foot.push(['part', `partition by ${t.raw.partition_key} · ${t.raw.partitions} partitions`]);
+    if ((t.raw.uses || []).length) t.foot.push(['view', 'reads ' + t.raw.uses.map(u => qual(u.schema, u.table)).join(', ')]);
+  }
+  // 여러 열 FK도 선은 1개: 이 표의 FK에 가장 적게 쓰인 열에 붙임(같으면 뒤쪽). (tenant_id, build_id, emp_id) → emp_id
+  for (const e of edges) {
+    const rc = e.fk.references.columns || [];
+    e.pairs = (e.fk.columns || []).map((n, j) => [n, rc[j]]).filter(([a, b]) => e.from.col.has(a) && e.to.col.has(b));
+    let best = e.pairs[0];
+    for (const p of e.pairs) if (e.from.col.get(p[0]).fks.length <= e.from.col.get(best[0]).fks.length) best = p;
+    e.anchor = best || [e.from.cols[0]?.name, e.to.cols[0]?.name];
+  }
+  return { raw, tables, edges, multi, qual };
+}
+
+// ── 그리기 ────────────────────────────────────────────────────────────────
+const FOOT_ICON = { uniq: 'uniq', check: 'check', idx: 'idx', fk: 'link', part: 'layout', view: 'eye' };
+function renderTables() {
+  world.querySelectorAll('.tbl').forEach(el => el.remove());
+  for (const t of M.tables) {
+    const el = h('div', { class: 'tbl', id: 't' + t.i },
+      h('h3', null, icon(isView(t) ? 'eye' : 'table'), h('span', { class: 'tn' }, M.multi ? h('span', { class: 'sc' }, t.schema + '.') : null, t.name), h('span', { class: 'kind' }, t.tag)),
+      t.note ? h('div', { class: 'note' }, t.note) : null);
+    for (const c of t.cols) {
+      const ic = h('span', { class: 'ic' }, c.pk ? icon('key', 'pk') : null, c.fks.length ? icon('link', 'fk') : null,
+        c.notnull ? icon('dot', 'nn') : icon('ring', 'nul'), c.identity || c.serial ? icon('hash') : null, c.uniq ? icon('uniq') : null);
+      const row = h('div', { class: 'row' + (c.pk ? ' pk' : '') }, ic, h('span', { class: 'nm' }, c.name), h('span', { class: 'ty' }, shortType(c.type)));
+      row.$t = t; row.$c = c; c.row = row; el.append(row);
+    }
+    if (t.foot.length) el.append(h('div', { class: 'foot' }, ...t.foot.map(([k, s]) => h('div', null, icon(FOOT_ICON[k]), h('span', null, s)))));
+    t.el = el; t.x = t.y = 0; world.append(el);
+  }
+  for (const e of M.edges) {
+    e.fromRow = e.from.col.get(e.anchor[0])?.row || e.from.el; e.toRow = e.to.col.get(e.anchor[1])?.row || e.to.el;
+    e.rows = new Set([e.fromRow, e.toRow, ...e.pairs.flatMap(([a, b]) => [e.from.col.get(a).row, e.to.col.get(b).row])].filter(r => r.$t));
+  }
+  const s = M.raw, nt = M.tables.filter(t => !isView(t)).length, schemas = [...new Set(M.tables.map(t => t.schema))];
+  $('meta').textContent = [`PG ${s.server_version || '?'}`, s.database, schemas.length > 1 ? `${schemas.length} schemas` : `schema ${schemas[0]}`,
+    `${nt} tables`, `${M.tables.length - nt} views`].filter(Boolean).join(' · ');
+}
+
+// ── 자동 배치: 가리킴 받는 표가 왼쪽. 순환은 끊고, 층마다 열 하나, 열 안 순서는 이웃 위치 평균으로 ──
+function layout() {
+  const H = t => t.el.offsetHeight, cmp = (a, b) => a.i - b.i;
+  const graph = M.tables.filter(t => !isView(t));
+  const out = new Map(graph.map(t => [t, new Set()])), inn = new Map(graph.map(t => [t, new Set()]));
+  for (const e of M.edges) if (e.from !== e.to && out.has(e.from) && out.has(e.to)) { out.get(e.from).add(e.to); inn.get(e.to).add(e.from); }
+  const linked = graph.filter(t => out.get(t).size || inn.get(t).size), lonely = graph.filter(t => !out.get(t).size && !inn.get(t).size);
+  // 순환 끊기: DFS에서 지금 지나는 길 위의 표로 돌아가는 선은 층 계산에서 뺌
+  const dag = new Map(linked.map(t => [t, []])), state = new Map();
+  const visit = t => { state.set(t, 1); for (const v of [...out.get(t)].sort(cmp)) { if (state.get(v) === 1) continue; dag.get(t).push(v); if (!state.has(v)) visit(v); } state.set(t, 2); };
+  [...linked].sort((a, b) => out.get(b).size - out.get(a).size || cmp(a, b)).forEach(t => state.has(t) || visit(t));
+  // 층 = 가리키는 표들 중 가장 긴 길 + 1. 가리킴만 받는 표는 가장 가까운 가리키는 표 바로 왼쪽으로 당김
+  const layer = new Map();
+  const L = t => { if (!layer.has(t)) layer.set(t, dag.get(t).reduce((m, v) => Math.max(m, L(v) + 1), 0)); return layer.get(t); };
+  linked.forEach(L);
+  for (const t of linked) if (!dag.get(t).length) { const ref = linked.filter(u => dag.get(u).includes(t)).map(u => layer.get(u)); if (ref.length) layer.set(t, Math.min(...ref) - 1); }
+  const levels = [...new Set(layer.values())].sort((a, b) => a - b);
+  let cols = levels.map(l => linked.filter(t => layer.get(t) === l).sort(cmp));
+  const li = new Map(); cols.forEach((c, ci) => c.forEach(t => li.set(t, ci)));
+  // 열 안 순서: 8번 왕복하며 이웃 위치 평균으로 정렬, 같은 열 쌍을 잇는 선의 교차가 가장 적은 순서를 남김
+  const nb = new Map(linked.map(t => [t, [...out.get(t), ...inn.get(t)]]));
+  const und = []; for (const t of linked) for (const v of out.get(t)) if (li.get(t) !== li.get(v)) und.push(li.get(t) < li.get(v) ? [t, v] : [v, t]);
+  const pos = new Map(), place = c => c.forEach((t, i) => pos.set(t, c.length > 1 ? i / (c.length - 1) : .5));
+  const crossings = () => { let n = 0; for (let i = 0; i < und.length; i++) for (let j = i + 1; j < und.length; j++) { const [a, b] = und[i], [c, d] = und[j];
+    if (li.get(a) === li.get(c) && li.get(b) === li.get(d) && (pos.get(a) - pos.get(c)) * (pos.get(b) - pos.get(d)) < 0) n++; } return n; };
+  cols.forEach(place); let best = cols.map(c => [...c]), bestN = crossings();
+  for (let it = 0; it < 8 && bestN > 0; it++) {
+    const seq = it % 2 ? [...cols.keys()].reverse() : [...cols.keys()];
+    for (const ci of seq) {
+      const bc = new Map(cols[ci].map(t => { const n = nb.get(t).filter(v => li.get(v) !== ci); return [t, n.length ? n.reduce((s, v) => s + pos.get(v), 0) / n.length : pos.get(t)]; }));
+      cols[ci].sort((a, b) => bc.get(a) - bc.get(b)); place(cols[ci]);
+    }
+    const n = crossings(); if (n < bestN) { bestN = n; best = cols.map(c => [...c]); }
+  }
+  cols = best;
+  // 너무 긴 열은 여러 열로 나눔 (화면 비율에 맞춘 높이 기준)
+  const views = M.tables.filter(isView), boxes = [...linked, ...views];
+  const area = boxes.reduce((s, t) => s + (CARD_W + GAP_MIN) * (H(t) + VGAP), 0);
+  const maxH = Math.max(0, ...boxes.map(H), Math.sqrt(area * (innerHeight - TOP - BOTTOM) / innerWidth));
+  const split = c => { const out = []; let cur = [], y = 0; for (const t of c) { if (cur.length && y + H(t) > maxH) { out.push(cur); cur = []; y = 0; } cur.push(t); y += H(t) + VGAP; } if (cur.length) out.push(cur); return out; };
+  const columns = cols.flatMap(split);
+  columns.forEach((c, ci) => c.forEach(t => t.ci = ci));
+  // 열 사이 폭 = 그 틈을 지나는 세로 선 수만큼 (drawLines와 같은 규칙)
+  const lanes = columns.map(() => 0);
+  for (const e of M.edges) { const a = e.from.ci, b = e.to.ci; if (!linked.includes(e.from) || !linked.includes(e.to)) continue; lanes[b < a ? b : b > a ? b - 1 : a]++; }
+  let x = X0, bottom = Y0;
+  columns.forEach((c, ci) => { let y = Y0; for (const t of c) { t.x = x; t.y = y; y += H(t) + VGAP; } bottom = Math.max(bottom, y); x += CARD_W + Math.max(GAP_MIN, 2 * LANE0 + 8 + LANE * lanes[ci]); });
+  // 뷰는 맨 오른쪽 열(길면 나눔), 읽는 표들의 높이 순. 관계없는 표는 아래 격자
+  const mid = t => t.y + H(t) / 2;
+  const vy = v => { const u = (v.raw.uses || []).map(r => M.tables.find(t => t.schema === r.schema && t.name === r.table)).filter(t => t && !isView(t) && linked.includes(t)); return u.length ? u.reduce((s, t) => s + mid(t), 0) / u.length : Infinity; };
+  for (const c of split([...views].sort((a, b) => vy(a) - vy(b) || cmp(a, b)))) { let y = Y0; for (const v of c) { v.x = x; v.y = y; y += H(v) + VGAP; } bottom = Math.max(bottom, y); x += CARD_W + GAP_MIN; }
+  if (lonely.length) {
+    const width = Math.max(x - X0, 4 * (CARD_W + 60)); let gx = X0, gy = columns.length || views.length ? bottom + 80 : Y0, rowH = 0;
+    for (const t of lonely) { if (gx > X0 && gx + CARD_W > X0 + width) { gx = X0; gy += rowH + VGAP; rowH = 0; } t.x = gx; t.y = gy; gx += CARD_W + 60; rowH = Math.max(rowH, H(t)); }
+  }
+  for (const t of M.tables) { t.el.style.left = t.x + 'px'; t.el.style.top = t.y + 'px'; }
+  world.style.width = Math.max(...M.tables.map(t => t.x + CARD_W)) + 200 + 'px';
+  world.style.height = Math.max(...M.tables.map(t => t.y + H(t))) + 200 + 'px';
+  drawLines();
+}
+
+// ── 선: 직각. 가리킴 받는 표 옆 틈에 세로 줄, 같은 틈의 선은 서로 다른 x ──
+function rowY(r) { const t = r.$t || M.tables.find(t => t.el === r); return t.y + (r === t.el ? 18 : r.offsetTop + r.offsetHeight / 2); }
+function drawLines() {
+  svg.replaceChildren();
+  const segs = M.edges.map(e => {
+    const s = e.from, t = e.to, sl = s.x, sr = s.x + s.el.offsetWidth, tl = t.x, tr = t.x + t.el.offsetWidth, g = { e, ay: rowY(e.fromRow), by: rowY(e.toRow) };
+    if (tr + 24 <= sl) Object.assign(g, { ax: sl, bx: tr, side: 1, base: tr });          // 받는 표가 왼쪽
+    else if (sr + 24 <= tl) Object.assign(g, { ax: sr, bx: tl, side: -1, base: tl });    // 받는 표가 오른쪽 (순환·직접 옮김)
+    else Object.assign(g, { ax: sr, bx: tr, side: 1, base: Math.max(sr, tr) });          // 위아래로 겹침: 오른쪽 바깥으로 돌아감
+    return g;
+  });
+  const groups = new Map();
+  for (const g of segs) { const k = g.side + ':' + Math.round(g.base); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(g); }
+  for (const list of groups.values()) list.sort((p, q) => p.by - q.by || p.ay - q.ay).forEach((g, i) => g.lx = g.base + g.side * (LANE0 + i * LANE));
+  for (const g of segs) {
+    const p = document.createElementNS(NS, 'path'); p.classList.add('edge'); p.setAttribute('d', `M${g.ax},${g.ay} H${g.lx} V${g.by} H${g.bx}`); svg.append(p);
+    g.e.path = p; g.e.dots = [[g.ax, g.ay], [g.bx, g.by]].map(([x, y]) => { const c = document.createElementNS(NS, 'circle'); c.classList.add('dot'); c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 3); svg.append(c); return c; });
+  }
+}
+
+// ── 화면: 이동·확대, 맞추기 ───────────────────────────────────────────────
+function apply() { world.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`; $('zoom').textContent = Math.round(scale * 100) + '%'; }
+function zoomAt(cx, cy, k) { const s = Math.min(3, Math.max(.1, scale * k)), r = s / scale; tx = cx - (cx - tx) * r; ty = cy - (cy - ty) * r; scale = s; apply(); }
+function fit() {
+  if (!M) return;
+  const x0 = Math.min(...M.tables.map(t => t.x)), y0 = Math.min(...M.tables.map(t => t.y));
+  const x1 = Math.max(...M.tables.map(t => t.x + t.el.offsetWidth)), y1 = Math.max(...M.tables.map(t => t.y + t.el.offsetHeight));
+  const W = innerWidth, H = innerHeight - TOP - BOTTOM, pad = 40;
+  scale = Math.min(1, Math.max(.1, Math.min((W - 2 * pad) / (x1 - x0), (H - 2 * pad) / (y1 - y0))));
+  tx = (W - (x1 - x0) * scale) / 2 - x0 * scale; ty = TOP + (H - (y1 - y0) * scale) / 2 - y0 * scale; apply();
+}
+// 휠: 트랙패드 두 손가락·마우스 휠 = 이동, 핀치(ctrlKey로 옴)·ctrl/⌘+휠 = 확대
+vp.addEventListener('wheel', e => {
+  e.preventDefault();
+  const k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1;
+  if (e.ctrlKey || e.metaKey) return zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * k * 0.002));
+  let dx = e.deltaX * k, dy = e.deltaY * k; if (e.shiftKey && !dx) { dx = dy; dy = 0; }
+  tx -= dx; ty -= dy; apply();
+}, { passive: false });
+// 끌기: 표 머리 = 표 옮기기, 빈 곳 = 화면 이동
+vp.addEventListener('mousedown', e => {
+  if (e.button !== 0 || e.target.closest('.row')) return;
+  const head = e.target.closest('.tbl h3'), t = head && M.tables.find(t => t.el === head.parentNode), sx = e.clientX, sy = e.clientY, ox = t ? t.x : tx, oy = t ? t.y : ty;
+  if (!t) vp.classList.add('drag');
+  const mv = ev => { if (t) { t.x = ox + (ev.clientX - sx) / scale; t.y = oy + (ev.clientY - sy) / scale; t.el.style.left = t.x + 'px'; t.el.style.top = t.y + 'px'; drawLines(); reselect(); } else { tx = ox + ev.clientX - sx; ty = oy + ev.clientY - sy; apply(); } };
+  const up = () => { removeEventListener('mousemove', mv); removeEventListener('mouseup', up); vp.classList.remove('drag'); };
+  addEventListener('mousemove', mv); addEventListener('mouseup', up);
+});
+
+// ── 열 클릭 = 이어진 FK만 강조 (여러 열 FK는 짝 열 전부) ────────────────────
+let selected = null;
+function clearSel() { selected = null; document.body.classList.remove('sel'); document.querySelectorAll('.hl,.selrow,.hastbl').forEach(e => e.classList.remove('hl', 'selrow', 'hastbl')); }
+function select(row) {
+  clearSel(); selected = row; document.body.classList.add('sel'); row.classList.add('selrow'); row.$t.el.classList.add('hastbl');
+  for (const e of M.edges) if (e.rows.has(row)) { e.path.classList.add('hl'); e.dots.forEach(d => d.classList.add('hl')); for (const r of e.rows) { if (r !== row) r.classList.add('hl'); r.$t.el.classList.add('hastbl'); } }
+}
+function reselect() { if (selected) select(selected); }
+vp.addEventListener('click', e => { const r = e.target.closest('.row'); if (!r) return clearSel(); r === selected ? clearSel() : select(r); });
+
+// ── 열 설명: 화면 고정 툴팁 (확대 정도와 상관없이 같은 크기) ───────────────────
+const tip = $('tip');
+vp.addEventListener('mouseover', e => {
+  const r = e.target.closest('.row'); if (!r) return;
+  const t = r.$t, c = r.$c, facts = [c.type];
+  if (c.pk) facts.push(t.pk.length > 1 ? `primary key (${t.pk.join(', ')})` : 'primary key');
+  for (const k of c.fks) facts.push(`foreign key (${k.columns.join(', ')}) → ${M.qual(k.references.schema, k.references.table)}(${(k.references.columns || []).join(', ')})`);
+  if (c.identity) facts.push(`identity ${c.identity}`); if (c.serial) facts.push('serial');
+  if (c.generated) facts.push(`generated ${c.generated}: ${c.expression}`);
+  if (c.default != null) facts.push(`default ${c.default}`);
+  if (c.uniq) facts.push('unique'); facts.push(c.notnull ? 'not null' : 'nullable'); facts.push(...c.checks);
+  tip.replaceChildren(...(c.comment ? [c.comment, '\n'] : []), h('span', { class: 'c' }, facts.join(' · ')));
+  tip.hidden = false;
+  const b = r.getBoundingClientRect(), w = tip.offsetWidth, ht = tip.offsetHeight;
+  tip.style.left = (b.right + 10 + w < innerWidth ? b.right + 10 : Math.max(4, b.left - 10 - w)) + 'px';
+  tip.style.top = Math.min(Math.max(TOP + 4, b.top - 4), innerHeight - BOTTOM - ht - 4) + 'px';
+});
+vp.addEventListener('mouseout', e => { if (e.target.closest('.row') && !e.relatedTarget?.closest?.('.row')) tip.hidden = true; });
+
+// ── 불러오기·붙여넣기·저장 ────────────────────────────────────────────────
+function showEmpty(msg) { $('err').textContent = msg || ''; $('close').hidden = !M; $('empty').hidden = false; }
+function load(text) {
+  let raw;
+  try { raw = parseInput(text); } catch (e) { showEmpty(e.message); return false; }
+  if (!raw.tables.length) { showEmpty('표가 하나도 없어요. 접속한 DB와 SQL 맨 위의 only_schemas를 확인해 주세요.'); return false; }
+  clearSel(); M = normalize(raw); renderTables(); layout(); fit();
+  $('empty').hidden = true; ['save', 'arrange', 'fit'].forEach(id => $(id).hidden = false);
+  return true;
+}
+function download(name, text, type) {
+  const a = h('a', { href: URL.createObjectURL(new Blob([text], { type })), download: name });
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+// 데이터를 넣은 HTML 한 파일. JSON 안의 '<'는 유니코드 escape로 바꿔서 script 태그가 중간에 닫히지 않게
+function bakedHtml() {
+  const doc = PRISTINE.cloneNode(true);
+  doc.querySelector('#erd-data').textContent = JSON.stringify(M.raw).replace(/</g, '\\u003c');
+  return '<!doctype html>\n' + doc.outerHTML;
+}
+function flash(btn, text) { const old = btn.textContent; btn.textContent = text; setTimeout(() => btn.textContent = old, 1200); }
+$('copy-sql').onclick = async e => {
+  try { await navigator.clipboard.writeText(SQL_TEXT); }
+  catch { const ta = h('textarea'); ta.value = SQL_TEXT; document.body.append(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+  flash(e.target, '복사됨');
+};
+$('get-sql').onclick = () => download('pg_erd.sql', SQL_TEXT, 'text/plain');
+$('draw').onclick = () => load($('paste').value);
+$('pick').onclick = () => $('file').click();
+$('file').onchange = async e => { const f = e.target.files[0]; e.target.value = ''; if (f) load(await f.text()); };
+$('close').onclick = () => { $('empty').hidden = true; };
+$('open').onclick = () => showEmpty('');
+$('save').onclick = () => download(`erd_${M.raw.database || 'schema'}.html`.replace(/[^\w.-]+/g, '_'), bakedHtml(), 'text/html');
+$('arrange').onclick = () => { layout(); fit(); reselect(); };
+$('fit').onclick = fit;
+addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('dragging'); });
+addEventListener('dragleave', e => { if (!e.relatedTarget) document.body.classList.remove('dragging'); });
+addEventListener('drop', async e => { e.preventDefault(); document.body.classList.remove('dragging'); const f = e.dataTransfer.files[0]; if (f) load(await f.text()); });
+
+document.querySelector('#hdr .tab').prepend(icon('diagram'));
+for (const id of ['open', 'save', 'arrange', 'fit']) $(id).append(icon({ open: 'open', save: 'save', arrange: 'layout', fit: 'fit' }[id]));
+$('legend').append(...[['Primary key', 'key', 'pk'], ['Foreign key', 'link', 'fk'], ['Identity', 'hash'], ['Unique', 'uniq'], ['Nullable', 'ring'], ['Non-Nullable', 'dot'], ['Index', 'idx'], ['Check', 'check'], ['View', 'eye']]
+  .map(([label, name, cls]) => { const s = h('span', null, icon(name), label); if (cls) s.firstChild.style.color = cls === 'pk' ? '#f5c542' : '#8ab4f8'; return s; }));
+apply();
+const embedded = $('erd-data').textContent.trim();
+if (embedded) load(embedded); else showEmpty('');
+
+// ── #selftest: 테스트가 읽을 사실만 적음 (판정은 tests/test_pg_erd.py) ─────────
+if (location.hash === '#selftest') {
+  const rep = { errors: ERRORS };
+  if (!M) {   // 빈 화면에서 붙여넣기 흐름: 잘못된 입력, psql 기본 출력(머리말·줄 수 포함)
+    $('paste').value = 'not json'; $('draw').click(); rep.bad_input = $('err').textContent;
+    $('paste').value = ' erd_json\n----------\n {"format":"pg-erd/1","tables":[{"schema":"public","name":"a","kind":"table","columns":[{"name":"id","type":"integer","notnull":true}],"constraints":[],"indexes":[]}]}\n(1 row)\n';
+    $('draw').click(); rep.pasted = { tables: document.querySelectorAll('.tbl').length, panel_hidden: $('empty').hidden };
+  } else {
+    rep.viewport = { w: innerWidth, h: innerHeight, top: TOP, bottom: BOTTOM };
+    rep.tables = M.tables.map(t => { const b = t.el.getBoundingClientRect(); return { schema: t.schema, name: t.name, x: t.x, y: t.y, w: t.el.offsetWidth, h: t.el.offsetHeight, screen: [b.left, b.top, b.right, b.bottom] }; });
+    rep.edges = M.edges.map(e => ({ fk: e.fk.name, from: [e.from.schema, e.from.name, e.anchor[0]], to: [e.to.schema, e.to.name, e.anchor[1]], d: e.path.getAttribute('d') }));
+    const st = () => ({ scale, tx, ty }), wheel = o => vp.dispatchEvent(new WheelEvent('wheel', { deltaY: 120, clientX: 400, clientY: 300, bubbles: true, cancelable: true, ...o }));
+    const before = st(); wheel({}); const pan = st(); wheel({ deltaY: -120, ctrlKey: true });
+    rep.wheel = { before, pan, zoom: st() }; fit();
+    const e0 = M.edges[0], r0 = M.tables[0].cols[0]?.row, t0 = M.tables[0], hd = t0.el.querySelector('h3'), x0 = t0.x, b = hd.getBoundingClientRect();
+    if (e0) { e0.fromRow.dispatchEvent(new MouseEvent('click', { bubbles: true })); rep.click = { selected: e0.fromRow.classList.contains('selrow'), lines: document.querySelectorAll('path.edge.hl').length, target: e0.toRow.classList.contains('hl') }; clearSel(); }
+    if (r0) { r0.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })); rep.tip = { shown: !tip.hidden, text: tip.textContent }; tip.hidden = true; }
+    hd.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: b.left + 5, clientY: b.top + 5 }));
+    dispatchEvent(new MouseEvent('mousemove', { clientX: b.left + 105, clientY: b.top + 5 })); dispatchEvent(new MouseEvent('mouseup'));
+    rep.drag = { moved: t0.x - x0, expected: 100 / scale }; layout(); fit();
+    rep.saved = bakedHtml();
+  }
+  const pre = h('pre', { id: 'selftest-report', hidden: '' }, JSON.stringify(rep)); document.body.append(pre);
+}
+</script>
+</body></html>
