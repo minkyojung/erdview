@@ -49,9 +49,11 @@ erdview serve --source toy=postgresql://…/app --source spring=db/migration --p
 ```
 $ erdview diff db/migration@V0001 db/migration@V0002 --pg postgresql://postgres@localhost/postgres
 db/migration@V0001 → db/migration@V0002
-+ table   ri.builds
-+ column  ri.transactions_all.merchant_region
-~ column  ri.attendance_all.weekday  notnull: True → False
++ table   public.grades
++ column  public.students.phone
+- column  public.assignments.description
+~ column  public.courses.description  type: text → character varying(500)
++ fk      public.grades.grades_submission_id_fkey
 ```
 
 ![compare](docs/compare.png)
@@ -93,4 +95,4 @@ python -m venv .venv && .venv/bin/pip install -e '.[dev]'
 
 `erdview/pg_erd.sql` is the source of truth for the query. After changing it, paste it into the `#erd-sql` block of `erdview/viewer.html`; a test checks they match.
 
-MIT.
+[MIT](LICENSE).
