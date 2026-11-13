@@ -19,14 +19,11 @@ from pathlib import Path
 from . import core, __version__
 
 
-def source(arg: str | None) -> dict:
+def source(arg: str | None, admin_url: str | None = None) -> dict:
     s = arg or os.environ.get("DATABASE_URL")
     if not s: sys.exit("give a PostgreSQL URL, a JSON file, '-' for stdin, or set DATABASE_URL")
-    if s == "-": return core.load(sys.stdin.read())
-    if "://" in s: return core.schema(s)
-    p = Path(s)
-    if p.exists(): return core.load(p.read_text(encoding="utf-8"))
-    sys.exit(f"not a URL, not a file: {s}")
+    try: return core.resolve(s, admin_url)
+    except Exception as e: sys.exit(str(e))
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -37,7 +34,7 @@ def main(argv: list[str] | None = None) -> None:
         p = sub.add_parser(name); p.add_argument("source", nargs="?")
         if name == "export": p.add_argument("-o", "--out")
         if name == "open": p.add_argument("-o", "--out", help="also keep the HTML at this path")
-    sub.add_parser("sql")
+    sub.add_parser("sql"); sub.add_parser("mcp", help="run the MCP server on stdio (needs: pip install 'erdview[mcp]')")
     p = sub.add_parser("diff"); p.add_argument("a"); p.add_argument("b"); p.add_argument("--json", action="store_true")
     p.add_argument("--pg", default=os.environ.get("ERDVIEW_PG"))
     p = sub.add_parser("serve"); p.add_argument("source", nargs="?"); p.add_argument("--source", dest="sources", action="append", default=[], metavar="NAME=SPEC")
@@ -45,15 +42,12 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--port", type=int, default=0); p.add_argument("--no-browser", action="store_true")
     a = ap.parse_args(argv)
     if a.cmd == "sql": sys.stdout.write(core.SQL); return
+    if a.cmd == "mcp":
+        try: from . import mcp_server
+        except ImportError: sys.exit("the MCP server needs the mcp package: pip install 'erdview[mcp]'  (or: uvx --with mcp ... erdview mcp)")
+        mcp_server.main(); return
     if a.cmd == "diff":
-        from . import serve as S
-        def side(spec):
-            folder, _, ver = spec.rpartition("@") if "@" in spec and "://" not in spec else ("", "", spec)
-            if folder and Path(folder).is_dir():
-                try: return S.MigrationSource(Path(folder).name, folder, a.pg).schema(ver)
-                except (ValueError, S.MigrationError) as e: sys.exit(str(e))
-            return source(spec)
-        d = core.diff_schema(side(a.a), side(a.b))
+        d = core.diff_schema(source(a.a, a.pg), source(a.b, a.pg))
         import json; print(json.dumps(d, ensure_ascii=False) if a.json else core.format_diff(d, a.a, a.b))
         sys.exit(0 if core.is_empty_diff(d) else 1)
     if a.cmd == "serve":

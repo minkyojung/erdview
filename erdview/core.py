@@ -7,7 +7,7 @@
   open(data)       export to a temp file and open it in the browser; returns the path
 """
 from __future__ import annotations
-import json, re, tempfile, webbrowser
+import json, os, re, tempfile, webbrowser
 from pathlib import Path
 
 HERE = Path(__file__).parent
@@ -87,7 +87,7 @@ def open(data: dict, path: str | Path | None = None) -> Path:
     name = "erd_" + re.sub(r"[^\w.-]+", "_", data.get("database") or "schema") + ".html"
     p = Path(path) if path else Path(tempfile.mkdtemp(prefix="erdview_")) / name
     p.write_text(export(data), encoding="utf-8")
-    webbrowser.open(p.as_uri())
+    if not os.environ.get("ERDVIEW_NO_BROWSER"): webbrowser.open(p.as_uri())   # tests and headless agents set it
     return p
 
 
@@ -143,3 +143,18 @@ def format_diff(d: dict, a_label: str = "a", b_label: str = "b") -> str:
         for k, n in d[kind]["fks"]: L.append(f"{sign} fk      {k}.{n}")
         for k, n in d[kind]["indexes"]: L.append(f"{sign} index   {k}.{n}")
     return "\n".join(L)
+
+
+def resolve(spec: str, admin_url: str | None = None) -> dict:
+    """One rule for every entry point (CLI, MCP): a PostgreSQL URL, a JSON file (erdview or tbls), '-' for stdin,
+    or a migration folder at a version like db/migration@V0002 (built in a throwaway database on admin_url / $ERDVIEW_PG)."""
+    import sys
+    if spec == "-": return load(sys.stdin.read())
+    if "://" in spec: return schema(spec)
+    folder, _, ver = spec.rpartition("@") if "@" in spec else ("", "", "")
+    if folder and Path(folder).is_dir():
+        from . import serve as S
+        return S.MigrationSource(Path(folder).name, folder, admin_url or os.environ.get("ERDVIEW_PG")).schema(ver)
+    p = Path(spec)
+    if p.is_file(): return load(p.read_text(encoding="utf-8"))
+    raise ValueError(f"not a URL, a file, or a migration folder@VERSION: {spec}")

@@ -16,6 +16,7 @@ Interactive ERD for any database, from one HTML file. Read-only; nothing leaves 
 | Have a terminal and [uv](https://docs.astral.sh/uv/) | `uvx --from git+https://github.com/minkyojung/erdview erdview open postgresql://user@host:5432/db` |
 | Prefer pip | `pip install git+https://github.com/minkyojung/erdview` then `erdview open <url>` |
 | Use a coding agent (Claude Code, Cursor, Codex…) | Copy `skills/erdview/` into your project's `.claude/skills/` (or paste `skills/erdview/AGENTS.md` into your `AGENTS.md`). Then: "show me the ERD" |
+| Use a chat app with MCP (Claude Desktop, …) | Add the server below; then "open the ERD of postgresql://…", "what changed between V0001 and V0002?" |
 | Have another database | `brew install tbls`, then `tbls out -t json \| erdview open -` (see tbls docs for the `dsn`) |
 | Just want to look | Open the `erd_*.html` someone sent you. No install |
 | Have no Python at all | Download `viewer.html`, open it, press **Copy SQL**, run it in your SQL client, paste the result |
@@ -57,6 +58,25 @@ db/migration@V0001 → db/migration@V0002
 
 - `#focus=table` in the URL shows only that table and its neighbours.
 - The server listens on 127.0.0.1 only; URLs and paths never reach the page.
+
+### MCP (chat apps)
+
+Three tools — `schema(source, tables?)`, `open_erd(source)`, `diff(a, b)` — over the same code as the CLI. stdio, local only.
+
+```
+claude mcp add erdview -- uvx --with mcp --from git+https://github.com/minkyojung/erdview erdview mcp
+```
+
+Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{ "mcpServers": { "erdview": {
+    "command": "uvx",
+    "args": ["--with", "mcp", "--from", "git+https://github.com/minkyojung/erdview", "erdview", "mcp"],
+    "env": { "ERDVIEW_PG": "postgresql://postgres:x@localhost:5433/postgres" } } } }
+```
+
+`ERDVIEW_PG` (an admin URL) is only needed for `folder@VERSION` sources. The `mcp` package is an optional extra (`pip install 'erdview[mcp]'`).
 
 ## What it reads
 

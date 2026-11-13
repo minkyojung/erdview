@@ -18,6 +18,8 @@ uvx --from git+https://github.com/minkyojung/erdview erdview open <SOURCE>
 
 Other commands: `export <SOURCE> -o erd.html` (one file to share), `schema <SOURCE>` (JSON you can read to answer questions about tables, columns and foreign keys), `sql` (the query), `serve --source NAME=SPEC ... [--pg ADMIN_URL]` (live viewer: changes you make to the database show up within 2 s; a migration folder gives one entry per version — use this while writing migrations), `diff A B` (what changed, as lines; A/B may be `folder@V0002`; put its output in the PR description after writing a migration).
 
+No terminal (chat app)? The same three actions exist as MCP tools `schema`, `open_erd`, `diff` — see the README's MCP section for the one-line registration.
+
 ## Rules
 - Never run the query through a writable path you built yourself; use the `erdview` command, which opens a read-only connection.
 - If the database runs in Docker and `psql`/the port is not reachable from the host, prefer the published port from `docker-compose.yml`; `docker exec` is a fallback.
